@@ -11,4 +11,3 @@ func main() {
 		fmt.Println("index:", i, "argument:", arg)
 	}
 }
-

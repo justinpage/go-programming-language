@@ -7,7 +7,7 @@ import (
 )
 
 type Line struct {
-    File, Word string
+	File, Word string
 }
 
 func main() {
