@@ -6,8 +6,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"time"
 	"strings"
+	"time"
 )
 
 func main() {
