@@ -18,40 +18,54 @@ const (
 
 var sin30, cos30 = math.Sin(angle), math.Cos(angle) // sin(30°), cos(30°)
 
+type Points struct {
+	X, Y    float64
+	Valleys bool
+}
+
 func main() {
 	fmt.Printf("<svg xmlns='http://www.w3.org/2000/svg' "+
 		"style='stroke: grey; fill: white; stroke-width: 0.7' "+
 		"width='%d' height='%d'>", width, height)
 	for i := 0; i < cells; i++ {
 		for j := 0; j < cells; j++ {
-			ax, ay, err := corner(i+1, j)
+			pointsA, err := corner(i+1, j)
 			if err != nil {
 				continue
 			}
 
-			bx, by, err := corner(i, j)
+			pointsB, err := corner(i, j)
 			if err != nil {
 				continue
 			}
 
-			cx, cy, err := corner(i, j+1)
+			pointsC, err := corner(i, j+1)
 			if err != nil {
 				continue
 			}
 
-			dx, dy, err := corner(i+1, j+1)
+			pointsD, err := corner(i+1, j+1)
 			if err != nil {
 				continue
 			}
 
-			fmt.Printf("<polygon points='%g,%g,%g,%g,%g,%g,%g,%g'/>\n",
-				ax, ay, bx, by, cx, cy, dx, dy)
+			if pointsA.Valleys {
+				fmt.Printf("<polygon points='%g,%g,%g,%g,%g,%g,%g,%g' "+
+					"style='fill:blue'/>\n",
+					pointsA.X, pointsA.Y, pointsB.X, pointsB.Y,
+					pointsC.X, pointsC.Y, pointsD.X, pointsD.Y)
+			} else {
+				fmt.Printf("<polygon points='%g,%g,%g,%g,%g,%g,%g,%g' "+
+					"style='fill:red'/>\n",
+					pointsA.X, pointsA.Y, pointsB.X, pointsB.Y,
+					pointsC.X, pointsC.Y, pointsD.X, pointsD.Y)
+			}
 		}
 	}
 	fmt.Println("</svg>")
 }
 
-func corner(i, j int) (float64, float64, error) {
+func corner(i, j int) (*Points, error) {
 	// Find point (x, y) at corner of cell (i, j)
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
@@ -59,14 +73,19 @@ func corner(i, j int) (float64, float64, error) {
 	// Compute surface height of z
 	z := f(x, y)
 
-	if math.IsInf(z, 0) {
-		return 0, 0, errors.New("Say no to infiniti")
+	if math.IsNaN(z) {
+		return &Points{}, errors.New("Say no to infiniti")
 	}
 
 	// Project (x,y,z) isometrically onto 2-D SVG canvas (sx,sy).
 	sx := width/2 + (x-y)*cos30*xyscale
 	sy := height/2 + (x+y)*sin30*xyscale - z*zscale
-	return sx, sy, nil
+
+	if z < 0 {
+		return &Points{sx, sy, true}, nil
+	}
+
+	return &Points{sx, sy, false}, nil
 }
 
 func f(x, y float64) float64 {
