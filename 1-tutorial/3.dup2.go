@@ -1,3 +1,5 @@
+// Dup2 prints the count and text of lines that appear more than once in the
+// input. It reads from stdin or from a list of named files.
 package main
 
 import (
@@ -22,12 +24,12 @@ func main() {
 			f.Close()
 		}
 	}
-
 	for line, n := range counts {
 		if n > 1 {
 			fmt.Printf("%d\t%s\n", n, line)
 		}
 	}
+
 }
 
 func countLines(f *os.File, counts map[string]int) {
@@ -35,4 +37,5 @@ func countLines(f *os.File, counts map[string]int) {
 	for input.Scan() {
 		counts[input.Text()]++
 	}
+	// NOTE: ignoring potential errors from input.Err()
 }
