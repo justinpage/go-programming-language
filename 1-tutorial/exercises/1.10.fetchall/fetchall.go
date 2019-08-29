@@ -1,3 +1,4 @@
+// Fetchall fetches URLs in parallel and reports their times and sizes.
 package main
 
 import (
@@ -6,32 +7,31 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
 func main() {
-	var output []byte
-
 	start := time.Now()
 	ch := make(chan string)
 
+	file, err := os.Create(fmt.Sprintf("./results-%v", start.Unix()))
+	if err != nil {
+		panic(err)
+	}
+
+	defer file.Close()
+
 	for _, url := range os.Args[1:] {
-		if has := strings.HasPrefix(url, "http://"); has != true {
-			url = "http://" + url
-		}
-
-		go fetch(url, ch)
+		go fetch(url, ch) // start a goroutine
 	}
+
 	for range os.Args[1:] {
-		result := []byte(<-ch)
-		output = append(output, result...)
+		file.WriteString(<-ch)
 	}
 
-	elapsed := fmt.Sprintf("%.2fs elapsed\n", time.Since(start).Seconds())
-	output = append(output, []byte(elapsed)...)
-
-	ioutil.WriteFile("/tmp/fetchall-results", output, 0644)
+	file.WriteString(
+		fmt.Sprintf("%.2fs elapsed\n", time.Since(start).Seconds()),
+	)
 }
 
 func fetch(url string, ch chan<- string) {
@@ -39,14 +39,14 @@ func fetch(url string, ch chan<- string) {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		ch <- fmt.Sprint(err)
+		ch <- fmt.Sprint(err) // send to channel ch
 		return
 	}
 
 	nbytes, err := io.Copy(ioutil.Discard, resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		ch <- fmt.Sprint("While reading %s: %v\n", url, err)
+		ch <- fmt.Sprintf("while reading %s: %v\n", url, err)
 		return
 	}
 

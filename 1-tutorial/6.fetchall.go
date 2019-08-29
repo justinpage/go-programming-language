@@ -1,3 +1,4 @@
+// Fetchall fetches URLs in parallel and reports their times and sizes.
 package main
 
 import (
@@ -14,10 +15,11 @@ func main() {
 	ch := make(chan string)
 
 	for _, url := range os.Args[1:] {
-		go fetch(url, ch)
+		go fetch(url, ch) // start a goroutine
 	}
+
 	for range os.Args[1:] {
-		fmt.Println(<-ch)
+		fmt.Println(<-ch) // receive from channel ch
 	}
 
 	fmt.Printf("%.2fs elapsed\n", time.Since(start).Seconds())
@@ -28,14 +30,14 @@ func fetch(url string, ch chan<- string) {
 
 	resp, err := http.Get(url)
 	if err != nil {
-		ch <- fmt.Sprint(err)
+		ch <- fmt.Sprint(err) // send to channel ch
 		return
 	}
 
 	nbytes, err := io.Copy(ioutil.Discard, resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		ch <- fmt.Sprint("While reading %s: %v", url, err)
+		ch <- fmt.Sprintf("while reading %s: %v", url, err)
 		return
 	}
 

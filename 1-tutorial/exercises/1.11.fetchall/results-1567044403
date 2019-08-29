@@ -1,0 +1,24 @@
+Get http://googleusercontent.com: dial tcp: lookup googleusercontent.com: no such host0.10s   11598 http://www.google.com
+0.46s   59978 http://apple.com
+0.52s   37653 http://wordpress.org
+0.57s   71740 http://linkedin.com
+0.57s  116827 http://adobe.com
+0.58s   65566 http://accounts.google.com
+0.60s   74381 http://en.wikipedia.org
+0.61s   29021 http://vimeo.com
+0.65s   87961 http://github.com
+0.65s   65502 http://docs.google.com
+0.65s   65881 http://drive.google.com
+0.65s  417620 http://support.google.com
+0.67s   65700 http://sites.google.com
+0.70s   44573 http://maps.google.com
+0.74s   94478 http://www.blogger.com
+0.81s  167558 http://mozilla.org
+0.88s   65548 http://plus.google.com
+0.88s  176593 http://microsoft.com
+0.98s 1114464 http://play.google.com
+1.10s  439580 http://amazon.com
+1.19s  106274 http://creativecommons.org
+1.36s  447429 http://youtu.be
+1.43s  421505 http://youtube.com
+1.43s elapsed
