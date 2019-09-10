@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/justinpage/go-programming-language/2-program-structure/tempconv"
+	"github.com/justinpage/go-programming-language/2-program-structure/exercises/2.1.tempconv/tempconv"
 )
 
 func main() {
@@ -15,8 +15,10 @@ func main() {
 			fmt.Fprintf(os.Stderr, "cf: %v\n", err)
 			os.Exit(1)
 		}
+
 		f := tempconv.Fahrenheit(t)
 		c := tempconv.Celsius(t)
+
 		fmt.Printf("%s = %s, %s = %s\n",
 			f, tempconv.FToC(f), c, tempconv.CToF(c))
 	}
