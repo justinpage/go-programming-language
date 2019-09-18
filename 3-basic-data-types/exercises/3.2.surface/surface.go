@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"math"
 )
@@ -17,6 +18,10 @@ const (
 
 var sin30, cos30 = math.Sin(angle), math.Cos(angle) // sin(30°), cos(30°)
 
+type point struct {
+	x, y float64
+}
+
 func main() {
 	fmt.Printf("<svg xmlns='http://www.w3.org/2000/svg' "+
 		"style='stroke: grey; fill: white; stroke-width: 0.7' "+
@@ -24,36 +29,56 @@ func main() {
 
 	for i := 0; i < cells; i++ {
 		for j := 0; j < cells; j++ {
-			ax, ay := corner(i+1, j)
-			bx, by := corner(i, j)
-			cx, cy := corner(i, j+1)
-			dx, dy := corner(i+1, j+1)
+			pointA, err := corner(i+1, j)
+			if err != nil {
+				continue
+			}
+
+			pointB, err := corner(i, j)
+			if err != nil {
+				continue
+			}
+
+			pointC, err := corner(i, j+1)
+			if err != nil {
+				continue
+			}
+
+			pointD, err := corner(i+1, j+1)
+			if err != nil {
+				continue
+			}
 
 			fmt.Printf(
 				"<polygon points='%g,%g %g,%g %g,%g %g,%g'/>\n",
-				ax, ay, bx, by, cx, cy, dx, dy)
+				pointA.x, pointA.y, pointB.x, pointB.y,
+				pointC.x, pointC.y, pointD.x, pointD.y,
+			)
 		}
 	}
+
 	fmt.Printf("</svg>")
 }
 
-func corner(i, j int) (float64, float64) {
+func corner(i, j int) (*point, error) {
 	// Find point (x,y) at corner of cell (i,j)
 	x := xyrange * (float64(i)/cells - 0.5)
 	y := xyrange * (float64(j)/cells - 0.5)
 
-	// Compute surface height of z
 	z := f(x, y)
-	// fmt.Println(math.IsInf(z, 0))
+
+	if math.IsNaN(z) {
+		return &point{}, errors.New("not a number")
+	}
 
 	// Project (x,y,z) isometrically onto 2-D SVG canvas (sx,sy)
 	sx := width/2 + (x-y)*cos30*xyscale
 	sy := height/2 + (x+y)*sin30*xyscale - z*zscale
 
-	return sx, sy
+	return &point{sx, sy}, nil
 }
 
 func f(x, y float64) float64 {
-	r := math.Hypot(x, y) // distance from (0,0)
-	return math.Sin(r) / r
+	r := math.Cos(x) // distance from (0,0)
+	return (math.Sin(r) / r) * math.Cos(y)
 }
