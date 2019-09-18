@@ -56,8 +56,6 @@ func main() {
 			option.color = c
 		}
 
-		fmt.Println("1", option)
-
 		surface(w, option)
 	}
 	http.HandleFunc("/", handler)
@@ -66,7 +64,6 @@ func main() {
 
 func surface(out http.ResponseWriter, opt *options) {
 	out.Header().Set("Content-Type", "image/svg+xml")
-	fmt.Println("2", opt)
 
 	fmt.Fprintf(out, "<svg xmlns='http://www.w3.org/2000/svg' "+
 		"style='stroke: grey; fill: %s; stroke-width: 0.7' "+
