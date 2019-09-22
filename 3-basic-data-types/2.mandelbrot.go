@@ -21,12 +21,12 @@ func main() {
 		for px := 0; px < width; px++ {
 			x := float64(px)/width*(xmax-xmin) + xmin
 			z := complex(x, y)
-			// Image point (px, py) represents complex value z.
+			// Image point (px, py) represents complex value z
 			img.Set(px, py, mandelbrot(z))
 		}
 	}
 
-	png.Encode(os.Stdout, img) // NOTE: ignoring errors
+	png.Encode(os.Stdout, img) // Note: ignoring errors
 }
 
 func mandelbrot(z complex128) color.Color {
@@ -40,6 +40,5 @@ func mandelbrot(z complex128) color.Color {
 			return color.Gray{255 - contrast*n}
 		}
 	}
-
 	return color.Black
 }
