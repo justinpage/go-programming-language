@@ -9,7 +9,7 @@ func main() {
 	fmt.Println(intsToString([]int{1, 2, 3}))
 }
 
-// intsToString is alike fmt.Sprintf(values) but adds commas.
+// intsToString is like fmt.Sprintf(values) but adds commas.
 func intsToString(values []int) string {
 	var buf bytes.Buffer
 	buf.WriteByte('[')

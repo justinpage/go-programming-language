@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	fmt.Println(comma("12345"))
+	fmt.Println(comma("12345594949"))
 }
 
 // comma inserts comma in a non-negative decimal integer string.
