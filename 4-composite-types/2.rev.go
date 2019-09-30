@@ -18,7 +18,7 @@ func main() {
 	reverse(s[:2])
 	reverse(s[2:])
 	reverse(s)
-	fmt.Println(s)
+	fmt.Println(s) // 2, 3, 4, 5, 0, 1
 
 	r := []int{0, 1, 2, 3, 4, 5}
 	reverse(r)
