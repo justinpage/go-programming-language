@@ -16,7 +16,7 @@ func main() {
 	}
 
 	if command[0] == "index" {
-		if err := xkcd.SeedIndexAlt(); err != nil {
+		if err := xkcd.SeedIndex(); err != nil {
 			log.Fatal(err)
 		}
 
