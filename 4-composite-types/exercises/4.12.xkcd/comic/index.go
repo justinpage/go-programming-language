@@ -46,7 +46,7 @@ func SeedIndex() error {
 	comics := make(chan int)
 	results := make(chan *comic, index.Number)
 
-	// Create a max of 200 workers that are ready to process all comics
+	// Create a max of 50 workers that are ready to process all comics
 	for i, j := 1, concurrency; i <= j; i++ {
 		go worker(comics, results)
 	}
