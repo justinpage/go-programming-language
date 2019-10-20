@@ -36,6 +36,6 @@ func main() {
 
 	for _, item := range result.Items {
 		fmt.Printf("#%-5d %-21.21s (%s)\n",
-			item.Number, itemAgeCategory(item.Created), item.Created)
+			item.Number, itemAgeCategory(item.CreatedAt), item.CreatedAt)
 	}
 }
