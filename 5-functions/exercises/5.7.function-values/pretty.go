@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
 	"os"
@@ -8,30 +9,34 @@ import (
 	"golang.org/x/net/html"
 )
 
-var depth int
+var depth int           // bad pattern: global
+var buffer bytes.Buffer // bad pattern: global
 
 func main() {
 	for _, url := range os.Args[1:] {
-		outline(url)
+		doc := Outline(url)
+		fmt.Println(doc.String())
 	}
 }
 
-func outline(url string) {
+func Outline(url string) bytes.Buffer {
 	resp, err := http.Get(url)
 	if err != nil {
-		fmt.Printf("getting %s: %s", url, err)
+		fmt.Fprintf(&buffer, "getting %s: %s", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		fmt.Printf("getting %s: %s", url, resp.Status)
+		fmt.Fprintf(&buffer, "getting %s: %s", url, resp.Status)
 	}
 	doc, err := html.Parse(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		fmt.Errorf("parsing %s: as HTML: %v", url, err)
+		fmt.Fprintf(&buffer, "parsing %s: as HTML: %v", url, err)
 	}
 
 	forEachNode(doc, startElement, endElement)
+
+	return buffer
 }
 
 // forEachNode calls the functions pre(x) and post(x) for each node x in the
@@ -55,14 +60,19 @@ func forEachNode(n *html.Node, pre, post func(n *html.Node)) {
 func startElement(n *html.Node) {
 	switch n.Type {
 	case html.CommentNode:
-		fmt.Printf("%*s<!--%s-->\n", depth*2, "", n.Data)
+		fmt.Fprintf(&buffer, "%*s<!--%s-->\n", depth*2, "", n.Data)
 		depth++
 	case html.ElementNode:
-		fmt.Printf("%*s<%s", depth*2, "", n.Data)
+		fmt.Fprintf(&buffer, "%*s<%s", depth*2, "", n.Data)
 		for _, a := range n.Attr {
-			fmt.Printf(" %s='%s'", a.Key, a.Val)
+			fmt.Fprintf(&buffer, " %s='%s'", a.Key, a.Val)
 		}
-		fmt.Printf(">\n")
+		fmt.Fprintf(&buffer, ">\n")
+		depth++
+	case html.TextNode:
+		if n.Data != "" {
+			fmt.Fprintf(&buffer, "%*s%s\n", depth*2, "", n.Data)
+		}
 		depth++
 	}
 }
@@ -74,7 +84,9 @@ func endElement(n *html.Node) {
 	case html.ElementNode:
 		depth--
 		if n.FirstChild != nil && n.LastChild != nil {
-			fmt.Printf("%*s</%s>\n", depth*2, "", n.Data)
+			fmt.Fprintf(&buffer, "%*s</%s>\n", depth*2, "", n.Data)
 		}
+	case html.TextNode:
+		depth--
 	}
 }
