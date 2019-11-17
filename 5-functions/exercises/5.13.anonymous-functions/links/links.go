@@ -3,10 +3,33 @@ package links
 
 import (
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 
 	"golang.org/x/net/html"
 )
+
+func Download(url string, file *os.File) error {
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return fmt.Errorf("getting %s: %s", url, resp.Status)
+	}
+
+	defer resp.Body.Close()
+
+	if err != nil {
+		return fmt.Errorf("parsing %s: as HTML: %v", url, err)
+	}
+
+	io.Copy(file, resp.Body)
+
+	return nil
+}
 
 // Extract makes an HTTP GET request to the specified URL, parses
 // the response as HTML, and returns the links in the HTML document.
