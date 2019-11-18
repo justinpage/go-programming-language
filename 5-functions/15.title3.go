@@ -11,38 +11,64 @@ import (
 
 func main() {
 	for _, url := range os.Args[1:] {
-		err := title(url)
+		text, err := title(url)
 		if err != nil {
 			fmt.Println(err)
 		}
+		fmt.Println(text)
 	}
 }
 
-func title(url string) error {
+func title(url string) (string, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	ct := resp.Header.Get("Content-Type")
 	if ct != "text/html" && !strings.HasPrefix(ct, "text/html;") {
-		return fmt.Errorf("%s has type %s, not text/html", url, ct)
+		return "", fmt.Errorf("%s has type %s, not text/html", url, ct)
 	}
 
 	doc, err := html.Parse(resp.Body)
 	if err != nil {
-		fmt.Errorf("parsing %s: as HTML: %v", url, err)
+		return "", fmt.Errorf("parsing %s: as HTML: %v", url, err)
 	}
 
-	vistNode := func(n *html.Node) {
+	return soleTitle(doc)
+
+}
+
+func soleTitle(doc *html.Node) (title string, err error) {
+	type bailout struct{}
+
+	defer func() {
+		switch p := recover(); p {
+		case nil:
+			// no panic
+		case bailout{}:
+			// "expected" panic
+			err = fmt.Errorf("multiple title elements")
+		default:
+			panic(p) // unexpected panic; carry on panicking
+		}
+	}()
+
+	forEachNode(doc, func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "title" &&
 			n.FirstChild != nil {
-			fmt.Println(n.FirstChild.Data)
+			if title != "" {
+				panic(bailout{}) // multiple title elements
+			}
+			title = n.FirstChild.Data
 		}
+	}, nil)
+	if title == "" {
+		return "", fmt.Errorf("no title element")
 	}
-	forEachNode(doc, vistNode, nil)
-	return nil
+
+	return title, nil
 }
 
 // forEachNode calls the functions pre(x) and post(x) for each node x in the
