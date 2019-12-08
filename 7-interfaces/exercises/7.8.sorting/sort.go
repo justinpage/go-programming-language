@@ -5,84 +5,128 @@ import (
 	"os"
 	"sort"
 	"text/tabwriter"
-	"time"
 )
 
-type Track struct {
-	Title  string
-	Artist string
-	Album  string
-	Year   int
-	Length time.Duration
+type City struct {
+	Name  string
+	State string
 }
 
-type byArtist []*Track
-type byYear []*Track
-
-type customSort struct {
-	t    []*Track
-	less func(x, y *Track) bool
+type CityOrder struct {
+	City
+	Order int
 }
 
-var tracks = []*Track{
-	{"Go", "Delilah", "From the Roots up", 2012, length("3m38s")},
-	{"Go", "Moby", "Moby", 1992, length("3m37s")},
-	{"Go Ahead", "Alicia Keys", "As I Am", 2007, length("4m36s")},
-	{"Ready 2 Go", "Martin Solveig", "Smash", 2011, length("4m24s")},
+type byName []*City
+type byState []*City
+
+type byCityOrder []*CityOrder
+
+type stableSort struct {
+	t    []*CityOrder
+	less func(x, y *CityOrder) bool
 }
 
-func length(s string) time.Duration {
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		panic(s)
+func cities() []*City {
+	return []*City{
+		{"Chicago", "IL"}, {"Champaign", "IL"}, {"Detroit", "MI"},
+		{"New York", "NY"}, {"Buffalo", "NY"}, {"Milwaukee", "WI"},
+		{"Albany", "NY"}, {"Green Bay", "WI"}, {"Syracuse", "NY"},
+		{"Rockford", "IL"}, {"Evanston", "IL"},
 	}
-	return d
 }
 
-func printTracks(tracks []*Track) {
-	const format = "%v\t%v\t%v\t%v\t%v\t\n"
+func citiesWithOrder() byCityOrder {
+	return byCityOrder{
+		{City{"Chicago", "IL"}, 0}, {City{"Champaign", "IL"}, 0},
+		{City{"Detroit", "MI"}, 0}, {City{"New York", "NY"}, 0},
+		{City{"Buffalo", "NY"}, 0}, {City{"Milwaukee", "WI"}, 0},
+		{City{"Albany", "NY"}, 0}, {City{"Green Bay", "WI"}, 0},
+		{City{"Syracuse", "NY"}, 0}, {City{"Rockford", "IL"}, 0},
+		{City{"Evanston", "IL"}, 0},
+	}
+}
+
+func printCities(cities []*City) {
+	const format = "%v\t%v\t\n"
 	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
-	fmt.Fprintf(tw, format, "Title", "Artist", "Album", "Year", "Length")
-	fmt.Fprintf(tw, format, "-----", "------", "-----", "----", "------")
-	for _, t := range tracks {
-		fmt.Fprintf(tw, format, t.Title, t.Artist,
-			t.Album, t.Year, t.Length)
+	fmt.Fprintf(tw, format, "Name", "State")
+	fmt.Fprintf(tw, format, "----", "-----")
+	for _, c := range cities {
+		fmt.Fprintf(tw, format, c.Name, c.State)
 	}
 	tw.Flush() // calculate column widths and print table
 }
 
-func (x byArtist) Len() int           { return len(x) }
-func (x byArtist) Less(i, j int) bool { return x[i].Artist < x[j].Artist }
-func (x byArtist) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func printCitiesWithOrder(cities []*CityOrder) {
+	const format = "%v\t%v\t%v\t\n"
+	tw := new(tabwriter.Writer).Init(os.Stdout, 0, 8, 2, ' ', 0)
+	fmt.Fprintf(tw, format, "Name", "State", "Order")
+	fmt.Fprintf(tw, format, "----", "-----", "-----")
+	for _, c := range cities {
+		fmt.Fprintf(tw, format, c.Name, c.State, c.Order)
+	}
+	tw.Flush() // calculate column widths and print table
+}
 
-func (x byYear) Len() int           { return len(x) }
-func (x byYear) Less(i, j int) bool { return x[i].Year < x[j].Year }
-func (x byYear) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+func (x byName) Len() int           { return len(x) }
+func (x byName) Less(i, j int) bool { return x[i].Name < x[j].Name }
+func (x byName) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
 
-func (x customSort) Len() int           { return len(x.t) }
-func (x customSort) Less(i, j int) bool { return x.less(x.t[i], x.t[j]) }
-func (x customSort) Swap(i, j int)      { x.t[i], x.t[j] = x.t[j], x.t[i] }
+func (x byState) Len() int           { return len(x) }
+func (x byState) Less(i, j int) bool { return x[i].State < x[j].State }
+func (x byState) Swap(i, j int)      { x[i], x[j] = x[j], x[i] }
+
+func (x stableSort) Len() int           { return len(x.t) }
+func (x stableSort) Less(i, j int) bool { return x.less(x.t[i], x.t[j]) }
+func (x stableSort) Swap(i, j int)      { x.t[i], x.t[j] = x.t[j], x.t[i] }
 
 func main() {
-	sort.Sort(byArtist(tracks))
-	printTracks(tracks)
+	// Stability not guaranteed
+	listOfCities := cities()
 
-	sort.Sort(sort.Reverse(byArtist(tracks)))
-	printTracks(tracks)
+	sort.Stable(byName(listOfCities))
+	sort.Stable(byState(listOfCities))
 
-	sort.Sort(byYear(tracks))
-	printTracks(tracks)
+	printCities(listOfCities)
 
-	sort.Sort(customSort{tracks, func(x, y *Track) bool {
-		if x.Title != y.Title {
-			return x.Title < y.Title
+	// Explicit stability
+	listOfCitiesWithOrder := citiesWithOrder()
+
+	byNameStable := func(x, y *CityOrder) bool {
+		if x.Name == y.Name {
+			return x.Order < y.Order
 		}
-		if x.Year != y.Year {
-			return x.Year < y.Year
+		return x.Name < y.Name
+	}
+
+	byStateStable := func(x, y *CityOrder) bool {
+		if x.State == y.State {
+			return x.Order < y.Order
 		}
-		if x.Length != y.Length {
-			return x.Length < y.Length
+		return x.State < y.State
+	}
+
+	var byActions []func(x, y *CityOrder) bool
+	byActions = append(byActions, byNameStable)
+	byActions = append(byActions, byStateStable)
+
+	listOfCitiesWithOrder.Sort(byActions)
+
+	printCitiesWithOrder(listOfCitiesWithOrder)
+}
+
+func (c byCityOrder) Sort(byActions []func(x, y *CityOrder) bool) {
+	sort.Sort(stableSort{c, byActions[0]})
+
+	// Keep order from first sort
+	for i, v := range c {
+		v.Order = i
+	}
+
+	if len(byActions) > 1 {
+		for i := 1; i < len(byActions); i++ {
+			sort.Sort(stableSort{c, byActions[i]})
 		}
-		return false
-	}})
+	}
 }
