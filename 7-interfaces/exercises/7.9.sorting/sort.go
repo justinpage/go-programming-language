@@ -1,11 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"html/template"
 	"log"
 	"os"
 	"sort"
-	"html/template"
 )
 
 type City struct {
@@ -18,7 +17,7 @@ type byCityOrder []*City
 
 type stableSort struct {
 	t    []*City
-	less func(x, y *CityOrder) bool
+	less func(x, y *City) bool
 }
 
 func cities() byCityOrder {
@@ -40,7 +39,7 @@ func printCities(cities []*City) {
 	  <th>State</th>
 	  <th>Order</th>
 	</tr>
-	{{range cities}}
+	{{range .}}
 	<tr>
 	  <td>{{.Name}}</td>
 	  <td>{{.State}}</td>
@@ -62,9 +61,9 @@ func (x stableSort) Less(i, j int) bool { return x.less(x.t[i], x.t[j]) }
 func (x stableSort) Swap(i, j int)      { x.t[i], x.t[j] = x.t[j], x.t[i] }
 
 func main() {
-	listOfCitiesWithOrder := citiesWithOrder()
+	listOfCities := cities()
 
-	printCities(listOfCitiesWithOrder)
+	printCities(listOfCities)
 
 	// byNameStable := func(x, y *CityOrder) bool {
 	// 	if x.Name == y.Name {
@@ -72,24 +71,24 @@ func main() {
 	// 	}
 	// 	return x.Name < y.Name
 	// }
-    //
+	//
 	// byStateStable := func(x, y *CityOrder) bool {
 	// 	if x.State == y.State {
 	// 		return x.Order < y.Order
 	// 	}
 	// 	return x.State < y.State
 	// }
-    //
+	//
 	// var byActions []func(x, y *CityOrder) bool
 	// byActions = append(byActions, byNameStable)
 	// byActions = append(byActions, byStateStable)
-    //
+	//
 	// listOfCitiesWithOrder.Sort(byActions)
-    //
+	//
 	// printCitiesWithOrder(listOfCitiesWithOrder)
 }
 
-func (c byCityOrder) Sort(byActions []func(x, y *CityOrder) bool) {
+func (c byCityOrder) Sort(byActions []func(x, y *City) bool) {
 	sort.Sort(stableSort{c, byActions[0]})
 
 	// Keep order from first sort
