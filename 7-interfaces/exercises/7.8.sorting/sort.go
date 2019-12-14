@@ -85,6 +85,8 @@ func main() {
 	// Stability not guaranteed
 	listOfCities := cities()
 
+	printCities(listOfCities)
+
 	sort.Stable(byName(listOfCities))
 	sort.Stable(byState(listOfCities))
 

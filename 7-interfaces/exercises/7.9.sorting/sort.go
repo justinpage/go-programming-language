@@ -3,7 +3,7 @@ package main
 import (
 	"html/template"
 	"log"
-	"os"
+	"net/http"
 	"sort"
 )
 
@@ -31,61 +31,86 @@ func cities() byCityOrder {
 	}
 }
 
-func printCities(cities []*City) {
-	const cityList = `
-	<table>
-	<tr style='text-align: left'>
-	  <th>Name</th>
-	  <th>State</th>
-	  <th>Order</th>
-	</tr>
-	{{range .}}
-	<tr>
-	  <td>{{.Name}}</td>
-	  <td>{{.State}}</td>
-	  <td>{{.Order}}</td>
-	</tr>
-	{{end}}
-	</table>
-	`
-
-	var list = template.Must(template.New("citylist").Parse(cityList))
-
-	if err := list.Execute(os.Stdout, cities); err != nil {
-		log.Fatal(err)
-	}
-}
-
 func (x stableSort) Len() int           { return len(x.t) }
 func (x stableSort) Less(i, j int) bool { return x.less(x.t[i], x.t[j]) }
 func (x stableSort) Swap(i, j int)      { x.t[i], x.t[j] = x.t[j], x.t[i] }
 
+func byNameStable(x, y *City) bool {
+	if x.Name == y.Name {
+		return x.Order < y.Order
+	}
+	return x.Name < y.Name
+}
+
+func byStateStable(x, y *City) bool {
+	if x.State == y.State {
+		return x.Order < y.Order
+	}
+	return x.State < y.State
+}
+
 func main() {
 	listOfCities := cities()
 
-	printCities(listOfCities)
+	var byActions []func(x, y *City) bool
 
-	// byNameStable := func(x, y *CityOrder) bool {
-	// 	if x.Name == y.Name {
-	// 		return x.Order < y.Order
-	// 	}
-	// 	return x.Name < y.Name
-	// }
-	//
-	// byStateStable := func(x, y *CityOrder) bool {
-	// 	if x.State == y.State {
-	// 		return x.Order < y.Order
-	// 	}
-	// 	return x.State < y.State
-	// }
-	//
-	// var byActions []func(x, y *CityOrder) bool
-	// byActions = append(byActions, byNameStable)
-	// byActions = append(byActions, byStateStable)
-	//
-	// listOfCitiesWithOrder.Sort(byActions)
-	//
-	// printCitiesWithOrder(listOfCitiesWithOrder)
+	printCities := func(w http.ResponseWriter, r *http.Request) {
+		const cityList = `
+		<style> th { cursor: pointer } </style>
+		<table>
+		<tbody>
+		<tr style='text-align: left'>
+		  <th onclick="sortBy('name');">Name</th>
+		  <th onclick="sortBy('state');">State</th>
+		  <th>Order</th>
+		</tr>
+		{{range .}}
+		<tr>
+		  <td>{{.Name}}</td>
+		  <td>{{.State}}</td>
+		  <td>{{.Order}}</td>
+		</tr>
+		</tbody>
+		{{end}}
+		</table>
+		<script>
+			async function sortBy(column) {
+				let table = document.getElementsByTagName("table")[0]
+				const actions = {
+					"name": "order-by-name",
+					"state": "order-by-state"
+				}
+
+				response = await fetch(actions[column])
+				table.innerHTML = await response.text()
+			}
+		</script>
+		`
+
+		var list = template.Must(template.New("citylist").Parse(cityList))
+
+		if err := list.Execute(w, listOfCities); err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	orderByName := func(w http.ResponseWriter, r *http.Request) {
+		byActions = append(byActions, byNameStable)
+		listOfCities.Sort(byActions)
+		printCities(w, r)
+	}
+
+	orderByState := func(w http.ResponseWriter, r *http.Request) {
+		byActions = append(byActions, byStateStable)
+		listOfCities.Sort(byActions)
+		printCities(w, r)
+	}
+
+	http.HandleFunc("/", printCities)
+	http.HandleFunc("/order-by-name", orderByName)
+	http.HandleFunc("/order-by-state", orderByState)
+
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 func (c byCityOrder) Sort(byActions []func(x, y *City) bool) {
