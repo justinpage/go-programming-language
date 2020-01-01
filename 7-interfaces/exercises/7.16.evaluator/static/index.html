@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<!-- CREDIT: https://codepen.io/sfrisk/pen/BymJer -->
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width">
+		<title>web-based calculator</title>
+		<link rel="stylesheet" href="style.css" type="text/css">
+	</head>
+	<body>
+		<div id="appleCalculator">
+			<div class="calculator">
+				<input class="readout" type='readonly' disabled>
+				<div class="keys">
+					<div class="row">
+						<button onclick="calculator.clear();" class="key misc clear">C</button>
+						<button onclick="calculator.set('-');" class="key misc"><sup>+</sup>/<sub>−</sub></button>
+						<button onclick="calculator.save('pow');" class="key misc">x<sup>y</sup></button>
+						<button onclick="calculator.execute('sqrt');" class="key misc sqrt">&radic;<span>&#8239;x</span></button>
+						<button onclick="calculator.execute('sin');" class="key misc sin">sin</button>
+						<button onclick="calculator.save('/');" class="key function">÷</button>
+					</div>
+					<div class="row">
+						<button onclick="calculator.set('7');" class="key numeric">7</button>
+						<button onclick="calculator.set('8');" class="key numeric">8</button>
+						<button onclick="calculator.set('9');" class="key numeric">9</button>
+						<button onclick="calculator.save('*');" class="key function">x</button>
+					</div>
+					<div class="row">
+						<button onclick="calculator.set('4');" class="key numeric">4</button>
+						<button onclick="calculator.set('5');" class="key numeric">5</button>
+						<button onclick="calculator.set('6');" class="key numeric">6</button>
+						<button onclick="calculator.save('-');" class="key function">-</button>
+					</div>
+					<div class="row">
+						<button onclick="calculator.set('1');" class="key numeric">1</button>
+						<button onclick="calculator.set('2');" class="key numeric">2</button>
+						<button onclick="calculator.set('3');" class="key numeric">3</button>
+						<button onclick="calculator.save('+');" class="key function">+</button>
+					</div>
+					<div class="row">
+						<button onclick="calculator.set('0');" class="key numeric double">0</button>
+						<button onclick="calculator.set('.');" class="key numeric">.</button>
+						<button onclick="calculator.calculate();"class="key function last">=</button>
+					</div>
+				</div>
+			</div>
+		</div>
+		<script src="index.js"></script>
+	</body>
+</html>

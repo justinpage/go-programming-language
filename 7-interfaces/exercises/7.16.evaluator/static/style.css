@@ -1,0 +1,129 @@
+/* CREDIT: https://codepen.io/sfrisk/pen/BymJer */
+body {
+	font-family: "HelveticaNeue-UltraLight", "Helvetica Ultra Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-weight: 100;
+	background-color: #514a8b;
+}
+
+sub, sup {
+	font-size: 75%;
+	line-height: 0;
+	position: relative;
+}
+
+sup {
+	top: -0.4em;
+}
+
+sub {
+	bottom: -0em;
+}
+
+*:focus {
+	outline: 0
+}
+
+#appleCalculator {
+	margin: 0 auto;
+	width: 100px;
+}
+
+.calculator {
+	position: absolute;
+	top: 50%;
+	margin-top: -160px;
+	margin-left: -115px;
+	width: 347px;
+	height: 321px;
+	background: rgba(75, 75, 75, 0.55);
+	border-right: 1px solid #81df7f;
+	border-bottom: 1px solid #96abab;
+	border-left: 1px solid #81df7f;
+	border-top: 1px solid #96abab;
+	border-radius: 6px;
+	box-shadow: 0 0 20px 0 rgba(50, 50, 50, 0.75);
+}
+
+.readout {
+	font-size: 45px;
+	color: #ffffff;
+	background: transparent;
+	box-sizing: border-box;
+	display: block;
+	width: inherit;
+	border: 0;
+	margin: 28px 0 0 0;
+	text-align: right;
+	padding: 0 10px;
+	font-family: "HelveticaNeue-UltraLight", "Helvetica Ultra Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	font-weight: 100;
+}
+
+.keys {
+	position: absolute;
+	bottom: 0;
+}
+
+.row {
+	padding-top: 1px;
+	clear: both;
+}
+.row .key:first-child {
+	margin-left: 0px;
+}
+
+.key {
+	width: 57px;
+	height: 47px;
+	font-size: 22px;
+	border: 0;
+	float: left;
+	margin-left: 1px;
+	font-family: "HelveticaNeue-UltraLight", "Helvetica Ultra Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+.key.double {
+	width: 192px;
+	text-align: left;
+	padding-left: 25px;
+	border-bottom-left-radius: 6px;
+}
+.key.last {
+	border-bottom-right-radius: 6px;
+}
+
+.misc {
+	background: #d6d6d6;
+	font-size: 20px;
+	font-family: "HelveticaNeue-Light", "Helvetica Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	width: 57px;
+	margin-left: .9px;
+
+}
+.misc:active {
+	background-color: #b0b0b0;
+}
+.misc.sqrt span {
+	font-size: 17px;
+	text-decoration: overline;
+}
+
+.function {
+	background: #b54a7b;
+	color: #ffffff;
+	font-size: 25px;
+}
+.function:active {
+	background-color: #963e67;
+}
+.function:focus{
+	border: solid 1px #fff7ef;
+}
+
+.numeric {
+	background: #e0e0e0;
+	font-family: "HelveticaNeue-Light", "Helvetica Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+	width: 95.5px;
+}
+.numeric:active {
+	background-color: #bababa;
+}

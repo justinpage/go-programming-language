@@ -1,26 +1,20 @@
 package main
 
 import (
-	// "bufio"
 	"fmt"
 	"log"
 	"net/http"
-
-	// "os"
-	// "strconv"
 
 	"github.com/justinpage/go-programming-language/7-interfaces/exercises/7.16.evaluator/eval"
 )
 
 func main() {
-	// http.HandleFunc("/", render)
+	fs := http.FileServer(http.Dir("static"))
+	http.Handle("/", http.StripPrefix("/", fs))
+
 	http.HandleFunc("/calculate", calculate)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
-
-// func render(w http.ResponseWriter, req *http.Request) {
-//
-// }
 
 func calculate(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
