@@ -1,13 +1,11 @@
 function Expression(init) {
 	let values = init || { args: [] }
-	let evaluated = false
 
 	return {
 		storeOperator,
 		storeOperand,
 		storeFunction,
 		updateOperand,
-		evaluated,
 		calculate,
 		operator,
 		operands,
@@ -129,13 +127,6 @@ function Calculator(expression) {
 			return
 		}
 
-		// start over when expression has already been evaluated
-		if (expression.evaluated) {
-			readout.value = operand
-			expression.evaluated = false
-			return
-		}
-
 		readout.value = readout.value + operand
 	}
 
@@ -163,7 +154,6 @@ function Calculator(expression) {
 	function clearAllReadout() {
 		document.getElementsByTagName("input")[0].value = 0
 		expression.reset()
-
 	}
 
 	async function runFunction(fun) {
@@ -174,7 +164,6 @@ function Calculator(expression) {
 
 		readout.value = await expression.calculate()
 		expression.reset()
-		expression.evaluated = true
 	}
 
 	async function runOperator() {
@@ -185,14 +174,12 @@ function Calculator(expression) {
 			expression.storeOperand(readout.value)
 			readout.value = await expression.calculate()
 			expression.reset()
-			expression.evaluated = true
 			return
 		}
 
 		expression.updateOperand(1, readout.value) // account for multi-digit
 		readout.value = await expression.calculate()
 		expression.reset()
-		expression.evaluated = true
 	}
 }
 

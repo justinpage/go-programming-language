@@ -38,6 +38,5 @@ func parseAndCheck(s string) (eval.Expr, error) {
 	if err := expr.Check(vars); err != nil {
 		return nil, err
 	}
-
 	return expr, nil
 }
