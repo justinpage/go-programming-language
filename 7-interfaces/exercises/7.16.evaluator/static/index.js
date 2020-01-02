@@ -166,10 +166,12 @@ function Calculator(expression) {
 		document.getElementsByTagName("input")[0].value = 0
 		document.getElementsByClassName("clear")[0].innerText = "AC"
 		document.getElementsByClassName("clear")[0].onclick = clearAllReadout
+		expression.evaluated = false
 	}
 
 	function clearAllReadout() {
 		document.getElementsByTagName("input")[0].value = 0
+		expression.pending = false
 		expression.reset()
 	}
 
