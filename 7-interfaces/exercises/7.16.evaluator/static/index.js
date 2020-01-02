@@ -1,14 +1,19 @@
 function Expression(init) {
 	let values = init || { args: [] }
 
+	let evaluated = false
+	let pending = false
+
 	return {
 		storeOperator,
 		storeOperand,
 		storeFunction,
 		updateOperand,
+		evaluated,
 		calculate,
 		operator,
 		operands,
+		pending,
 		reset
 	}
 
@@ -89,7 +94,10 @@ function Calculator(expression) {
 		clear: clearReadout,
 		execute: runFunction,
 		calculate: runOperator,
+		operator: expression.operator,
+		operands: expression.operands
 	}
+
 
 	function setReadout(operand) {
 		document.getElementsByClassName("clear")[0].innerText = "C"
@@ -120,10 +128,18 @@ function Calculator(expression) {
 			return
 		}
 
-		// use operand (n) after operator (+) e.g. i + n
-		if (expression.operands().length == 1) {
+		// when an expression has been evaluated (e.g. i + n = x) or the
+		// expression is in a pending state (e.g. i + n where n is the last
+		// selected operator). This allows us to clear the readout when either
+		// states are true.
+		if (expression.evaluated || expression.pending) {
 			readout.value = operand
-			expression.storeOperand(operand) // account for multi-digit
+			expression.evaluated = false
+			if (expression.pending) {
+				readout.value = operand
+				expression.pending = false
+				return
+			}
 			return
 		}
 
@@ -143,6 +159,7 @@ function Calculator(expression) {
 		let operand = readout.value
 		expression.storeOperand(operand)
 		expression.storeOperator(operator)
+		expression.pending = true
 	}
 
 	function clearReadout() {
@@ -179,6 +196,7 @@ function Calculator(expression) {
 
 		expression.updateOperand(1, readout.value) // account for multi-digit
 		readout.value = await expression.calculate()
+		expression.evaluated = true
 		expression.reset()
 	}
 }
