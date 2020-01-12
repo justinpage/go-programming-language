@@ -63,13 +63,11 @@ func render(el *Element) {
 			switch v := v.(type) {
 			case Element:
 				depth++
-				fmt.Print(depth)
 				fmt.Printf("%*s%s->\n", depth*2, "", el.Type.Local)
 				depth++
 				outline(&v)
 			case CharData:
 				if strings.TrimSpace(string(v)) != "" {
-					fmt.Print(depth)
 					fmt.Printf("%*s%s\n", depth*2, "", v)
 				}
 				depth--
