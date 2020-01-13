@@ -6,11 +6,17 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"time"
 )
 
 func main() {
-	port := flag.String("port", "8080", "port number")
+	tz := os.Getenv("TZ")
+	if tz == "" {
+		tz = "Local" // fallback to local time zone
+	}
+
+	port := flag.String("port", "8000", "port number")
 	flag.Parse()
 
 	listener, err := net.Listen("tcp", ":"+*port)
@@ -23,14 +29,21 @@ func main() {
 			log.Print(err) // e.g., connection aborted
 			continue
 		}
-		go handleConn(conn) // handle connections concurrently
+		go handleConn(conn, tz) // handle connections concurrently
 	}
 }
 
-func handleConn(c net.Conn) {
+func handleConn(c net.Conn, tz string) {
 	defer c.Close()
+
+	location, err := time.LoadLocation(tz)
+	if err != nil {
+		return // e.g., invalid location
+	}
+
 	for {
-		_, err := io.WriteString(c, time.Now().Format("15:04:05\n"))
+		now := time.Now()
+		_, err := io.WriteString(c, now.In(location).Format("15:04:05\n"))
 		if err != nil {
 			return // e.g., client disconnected
 		}
