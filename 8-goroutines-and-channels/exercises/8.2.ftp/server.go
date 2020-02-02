@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"text/tabwriter"
 )
 
 // List of FTP server return codes
@@ -24,18 +25,14 @@ const (
 	ServiceClosingConnection    = "221 Service closing control connection\n"
 	ClosingDataConnection       = "226 Closing data connection\n"
 	EnteringPassiveMode         = "227 Entering Passive Mode (%s)\n"
-	UserLoggedInProceed         = "230 Logged in %s, proceed\n"
+	UserLoggedInProceed         = "230 User logged in, proceed\n"
 	PathNameCreated             = "257 Created \"%s\"\n"
 	CurrentWorkingDirectory     = "257 \"%s\"\n"
+	UserOkayNeedPassword        = "331 User %s okay, need password\n"
 	RequestedFileActionNotTaken = "450 Requested file action not taken\n"
 	RequestedActionHasFailed    = "500 Requested action has failed \"%s\"\n"
 	CommandNotImplemented       = "502 Command not implemented \"%s\"\n"
 )
-
-type server struct {
-	conn net.Conn
-	pasv net.Listener
-}
 
 func main() {
 	listener, err := net.Listen("tcp", "localhost:8080")
@@ -50,6 +47,7 @@ func main() {
 		}
 
 		s := &server{conn: conn}
+
 		s.handleResponse(ServiceReadyForNewUser) // automatically accept
 
 		go handleConn(s) // handle connections concurrently
@@ -59,14 +57,14 @@ func main() {
 func handleConn(s *server) {
 	defer s.conn.Close()
 
-	err := os.Chdir("/tmp/") // start each connection inside /tmp/ dir
-	if err != nil {
-		return // unable to use /tmp/ directory
-	}
-
 	temp, err := ioutil.TempDir("/tmp/", "ftp-")
 	if err != nil {
 		return // unable to create temporary directory
+	}
+
+	seedFolder(temp)
+	if err != nil {
+		return // unable to use temporary directory
 	}
 
 	defer os.RemoveAll(temp)
@@ -82,7 +80,9 @@ func handleConn(s *server) {
 
 		switch cmd {
 		case "USER":
-			s.handleResponse(fmt.Sprintf(UserLoggedInProceed, arg[0]))
+			s.handleResponse(fmt.Sprintf(UserOkayNeedPassword, arg[0]))
+		case "PASS":
+			s.handleResponse(UserLoggedInProceed)
 		case "SYST":
 			s.handleResponse(fmt.Sprintf(NameSystemType))
 		case "FEAT":
@@ -104,6 +104,46 @@ func handleConn(s *server) {
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
 		}
 	}
+
+	if cmd.Err() != nil {
+		return // something went wrong (not io.EOF); ignore for now
+	}
+}
+
+func seedFolder(temp string) error {
+	dat := []byte("hello\nftp\n")
+	err := ioutil.WriteFile(temp+"/message.md", dat, 0666)
+	if err != nil {
+		return err
+	}
+
+	err = os.Mkdir(temp+"/server", 0755)
+	if err != nil {
+		return err
+	}
+
+	dat, err = ioutil.ReadFile("./server.go")
+	if err != nil {
+		return err
+	}
+
+	err = ioutil.WriteFile(temp+"/server/main.go", dat, 0666)
+	if err != nil {
+		return err
+	}
+
+	err = os.Chdir(temp) // start each connection inside /tmp/ dir
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type server struct {
+	conn net.Conn
+	pasv net.Listener
+	text *tabwriter.Writer
 }
 
 func (s *server) handleResponse(msg string) {
@@ -114,6 +154,7 @@ func (s *server) handleResponse(msg string) {
 }
 
 func (s *server) handlePASV() {
+	// NEED: better error handling
 	var err error
 	s.pasv, err = net.Listen("tcp", "") // port automatically chosen
 
