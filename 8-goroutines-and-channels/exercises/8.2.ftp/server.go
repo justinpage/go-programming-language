@@ -1,6 +1,9 @@
 // References:
+
 // https://cr.yp.to/ftp.html
 // https://github.com/torbiak/gopl/tree/master/ex8.2
+// https://github.com/torbiak/gopl/tree/master/ex8.2
+// https://github.com/kspviswa/lsgo/blob/master/ls.go
 package main
 
 import (
@@ -13,6 +16,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 )
 
@@ -199,7 +203,13 @@ func (s *server) handleList(arg []string) {
 		}
 
 		for _, file := range files {
-			fmt.Fprintf(conn, "%s\r\n", file.Name())
+			fmt.Fprintf(conn, "%s ", file.Name())
+			fmt.Fprintf(conn, "%s ", file.Mode().String())
+			fmt.Fprintf(conn, "%v ", file.Size())
+			fmt.Fprintf(conn, "%v ", file.IsDir())
+			fmt.Fprintf(conn, "%v ", file.Sys().(*syscall.Stat_t).Uid)
+			fmt.Fprintf(conn, "%v ", file.Sys().(*syscall.Stat_t).Gid)
+			fmt.Fprintf(conn, "%v\r\n", file.Sys().(*syscall.Stat_t).Nlink)
 		}
 	}
 
