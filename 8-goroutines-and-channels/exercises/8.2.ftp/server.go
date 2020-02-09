@@ -14,6 +14,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/user"
 	"strconv"
 	"strings"
 	"syscall"
@@ -79,7 +80,7 @@ func handleConn(s *server) {
 		arg := strings.Split(cmd, " ")
 
 		if len(arg) > 1 {
-			cmd, arg = arg[0], arg[1:]
+			cmd = arg[0]
 		}
 
 		switch cmd {
@@ -100,6 +101,8 @@ func handleConn(s *server) {
 			s.handlePASV()
 		case "LIST":
 			s.handleList(arg)
+		case "NLST":
+			s.handleNLST(arg)
 		case "PWD":
 			cwd, _ := os.Getwd()
 			s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, cwd))
@@ -193,6 +196,32 @@ func (s *server) handleList(arg []string) {
 
 	s.handleResponse(AcceptedDataConnection)
 
+	tw := new(tabwriter.Writer).Init(conn, 0, 8, 2, ' ', 0)
+	list := func(file os.FileInfo) {
+		const format = "%s\t%3v %s\t%s\t%12v %s %s\r\n"
+
+		mode := file.Mode().String()
+		link := file.Sys().(*syscall.Stat_t).Nlink
+
+		uid := strconv.Itoa(int(file.Sys().(*syscall.Stat_t).Uid))
+		owner, _ := user.LookupId(uid)
+		username := owner.Username
+
+		gid := strconv.Itoa(int(file.Sys().(*syscall.Stat_t).Gid))
+		group, _ := user.LookupGroupId(gid)
+		groupname := group.Name
+
+		size := file.Size()
+		time := file.ModTime().Format("Jan  2 15:04")
+		name := file.Name()
+
+		fmt.Fprintf(tw, format, mode, link, username,
+			groupname, size, time, name,
+		)
+
+		tw.Flush()
+	}
+
 	switch a := len(arg); a {
 	// list current working directory
 	case 1:
@@ -203,14 +232,46 @@ func (s *server) handleList(arg []string) {
 		}
 
 		for _, file := range files {
-			fmt.Fprintf(conn, "%s ", file.Name())
-			fmt.Fprintf(conn, "%s ", file.Mode().String())
-			fmt.Fprintf(conn, "%v ", file.Size())
-			fmt.Fprintf(conn, "%v ", file.IsDir())
-			fmt.Fprintf(conn, "%v ", file.Sys().(*syscall.Stat_t).Uid)
-			fmt.Fprintf(conn, "%v ", file.Sys().(*syscall.Stat_t).Gid)
-			fmt.Fprintf(conn, "%v\r\n", file.Sys().(*syscall.Stat_t).Nlink)
+			list(file)
 		}
+	// list specific file or directory
+	case 2:
+		cwd, _ := os.Getwd()
+		files, err := ioutil.ReadDir(cwd)
+		if err != nil {
+			s.handleResponse(RequestedFileActionNotTaken)
+		}
+
+		match := arg[1]
+		for _, file := range files {
+			if file.Name() == match {
+				list(file)
+			}
+		}
+	}
+
+	s.handleResponse(ClosingDataConnection)
+}
+
+func (s *server) handleNLST(arg []string) {
+	conn, err := s.pasv.Accept()
+	if err != nil {
+		log.Print(err) // e.g., connection aborted
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "NLST"))
+	}
+
+	defer conn.Close()
+
+	s.handleResponse(AcceptedDataConnection)
+
+	cwd, _ := os.Getwd()
+	files, err := ioutil.ReadDir(cwd)
+	if err != nil {
+		s.handleResponse(RequestedFileActionNotTaken)
+	}
+
+	for _, file := range files {
+		fmt.Fprintf(conn, "%s\r\n", file.Name())
 	}
 
 	s.handleResponse(ClosingDataConnection)
