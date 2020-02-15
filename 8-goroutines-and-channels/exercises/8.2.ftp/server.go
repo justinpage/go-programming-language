@@ -24,7 +24,9 @@ import (
 // List of FTP server return codes
 const (
 	AcceptedDataConnection      = "150 Accepted data connection\n"
+	TypeIsNow8BitBinary         = "200 TYPE is now 8-bit binary\n"
 	SystemStatus                = "211 no-features\n"
+	FileStatus                  = "213 %s\n"
 	NameSystemType              = "215 UNIX Type: L8\n"
 	ServiceReadyForNewUser      = "220 Service ready for new user\n"
 	ServiceClosingConnection    = "221 Service closing control connection\n"
@@ -101,6 +103,10 @@ func handleConn(s *server) {
 			s.handlePASV()
 		case "LIST":
 			s.handleList(arg)
+		case "TYPE":
+			s.handleResponse(TypeIsNow8BitBinary)
+		case "SIZE":
+			s.handleSize(arg)
 		case "NLST":
 			s.handleNLST(arg)
 		case "PWD":
@@ -180,6 +186,7 @@ func (s *server) handlePASV() {
 	if err != nil {
 		log.Print(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "PASV"))
+		return
 	}
 
 	s.handleResponse(fmt.Sprintf(EnteringPassiveMode, location))
@@ -190,6 +197,7 @@ func (s *server) handleList(arg []string) {
 	if err != nil {
 		log.Print(err) // e.g., connection aborted
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "LIST"))
+		return
 	}
 
 	defer conn.Close()
@@ -197,6 +205,7 @@ func (s *server) handleList(arg []string) {
 	s.handleResponse(AcceptedDataConnection)
 
 	tw := new(tabwriter.Writer).Init(conn, 0, 8, 2, ' ', 0)
+
 	list := func(file os.FileInfo) {
 		const format = "%s\t%3v %s\t%s\t%12v %s %s\r\n"
 
@@ -229,22 +238,37 @@ func (s *server) handleList(arg []string) {
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
 			s.handleResponse(RequestedFileActionNotTaken)
+			return
 		}
 
 		for _, file := range files {
 			list(file)
 		}
-	// list specific file or directory
+	// list specific file or directory content
 	case 2:
 		cwd, _ := os.Getwd()
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
 			s.handleResponse(RequestedFileActionNotTaken)
+			return
 		}
 
 		match := arg[1]
 		for _, file := range files {
-			if file.Name() == match {
+			// list directory content
+			if file.Name() == match && file.IsDir() {
+				dir := fmt.Sprintf("%s/%s", cwd, file.Name())
+				files, err := ioutil.ReadDir(dir)
+				if err != nil {
+					s.handleResponse(RequestedFileActionNotTaken)
+					return
+				}
+				for _, file := range files {
+					list(file)
+				}
+			}
+			// list specific file
+			if file.Name() == match && !file.IsDir() {
 				list(file)
 			}
 		}
@@ -253,11 +277,30 @@ func (s *server) handleList(arg []string) {
 	s.handleResponse(ClosingDataConnection)
 }
 
+func (s *server) handleSize(arg []string) {
+	cwd, _ := os.Getwd()
+	path := fmt.Sprintf("%s/%s", cwd, arg[1])
+
+	file, err := os.Open(path)
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
+		return
+	}
+
+	info, err := file.Stat()
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(FileInfo, info.Size()))
+}
+
 func (s *server) handleNLST(arg []string) {
 	conn, err := s.pasv.Accept()
 	if err != nil {
-		log.Print(err) // e.g., connection aborted
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "NLST"))
+		return
 	}
 
 	defer conn.Close()
@@ -268,6 +311,7 @@ func (s *server) handleNLST(arg []string) {
 	files, err := ioutil.ReadDir(cwd)
 	if err != nil {
 		s.handleResponse(RequestedFileActionNotTaken)
+		return
 	}
 
 	for _, file := range files {
