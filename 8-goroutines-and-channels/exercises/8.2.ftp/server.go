@@ -337,11 +337,18 @@ func (s *server) handleRetrieve(arg []string) {
 		return
 	}
 
-	_, err = io.Copy(conn, file)
-	if err != nil && strings.Contains(err.Error(), "is a directory") {
+	info, err := file.Stat()
+	if err != nil {
+		log.Print(err)
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RETR"))
+		return
+	}
+	if info.IsDir() {
 		s.handleResponse(CanOnlyRetrieveRegularFiles)
 		return
 	}
+
+	_, err = io.Copy(conn, file)
 	if err != nil {
 		log.Print(err)
 		s.handleResponse(RequestedFileActionNotTaken)
