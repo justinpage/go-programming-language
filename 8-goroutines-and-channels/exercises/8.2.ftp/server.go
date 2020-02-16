@@ -2,7 +2,6 @@
 
 // https://cr.yp.to/ftp.html
 // https://github.com/torbiak/gopl/tree/master/ex8.2
-// https://github.com/torbiak/gopl/tree/master/ex8.2
 // https://github.com/kspviswa/lsgo/blob/master/ls.go
 package main
 
@@ -14,6 +13,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"os/signal"
 	"os/user"
 	"strconv"
 	"strings"
@@ -30,6 +30,7 @@ const (
 	NameSystemType              = "215 UNIX Type: L8\n"
 	ServiceReadyForNewUser      = "220 Service ready for new user\n"
 	ServiceClosingConnection    = "221 Service closing control connection\n"
+	RequestedFileActionTaken    = "226 File successfully transferred\n"
 	ClosingDataConnection       = "226 Closing data connection\n"
 	EnteringPassiveMode         = "227 Entering Passive Mode (%s)\n"
 	UserLoggedInProceed         = "230 User logged in, proceed\n"
@@ -39,6 +40,7 @@ const (
 	RequestedFileActionNotTaken = "450 Requested file action not taken\n"
 	RequestedActionHasFailed    = "500 Requested action has failed \"%s\"\n"
 	CommandNotImplemented       = "502 Command not implemented \"%s\"\n"
+	CanOnlyRetrieveRegularFiles = "550 Can only retrieve regular files\n"
 )
 
 func main() {
@@ -46,6 +48,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	temp, err := seedFolder()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	handleClose(temp)
+
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -63,18 +73,6 @@ func main() {
 
 func handleConn(s *server) {
 	defer s.conn.Close()
-
-	temp, err := ioutil.TempDir("/tmp/", "ftp-")
-	if err != nil {
-		return // unable to create temporary directory
-	}
-
-	seedFolder(temp)
-	if err != nil {
-		return // unable to use temporary directory
-	}
-
-	defer os.RemoveAll(temp)
 
 	cmd := bufio.NewScanner(s.conn)
 	for cmd.Scan() {
@@ -100,13 +98,15 @@ func handleConn(s *server) {
 		case "EPSV":
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
 		case "PASV":
-			s.handlePASV()
+			s.handlePassive()
 		case "LIST":
 			s.handleList(arg)
 		case "TYPE":
 			s.handleResponse(TypeIsNow8BitBinary)
 		case "SIZE":
 			s.handleSize(arg)
+		case "RETR":
+			s.handleRetrieve(arg)
 		case "NLST":
 			s.handleNLST(arg)
 		case "PWD":
@@ -123,34 +123,48 @@ func handleConn(s *server) {
 	}
 }
 
-func seedFolder(temp string) error {
-	dat := []byte("hello\nftp\n")
-	err := ioutil.WriteFile(temp+"/message.md", dat, 0666)
+func handleClose(path string) {
+	c := make(chan os.Signal, 2)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		os.RemoveAll(path)
+		os.Exit(0)
+	}()
+}
+
+func seedFolder() (string, error) {
+	temp, err := ioutil.TempDir("/tmp/", "ftp-")
 	if err != nil {
-		return err
+		return "", err // unable to create temporary directory
+	}
+	dat := []byte("hello\nftp\n")
+	err = ioutil.WriteFile(temp+"/message.md", dat, 0666)
+	if err != nil {
+		return "", err
 	}
 
 	err = os.Mkdir(temp+"/server", 0755)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	dat, err = ioutil.ReadFile("./server.go")
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	err = ioutil.WriteFile(temp+"/server/main.go", dat, 0666)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	err = os.Chdir(temp) // start each connection inside /tmp/ dir
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return temp, nil
 }
 
 type server struct {
@@ -166,7 +180,7 @@ func (s *server) handleResponse(msg string) {
 	}
 }
 
-func (s *server) handlePASV() {
+func (s *server) handlePassive() {
 	// NEED: better error handling
 	var err error
 	s.pasv, err = net.Listen("tcp", "") // port automatically chosen
@@ -237,6 +251,7 @@ func (s *server) handleList(arg []string) {
 		cwd, _ := os.Getwd()
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
+			log.Print(err)
 			s.handleResponse(RequestedFileActionNotTaken)
 			return
 		}
@@ -249,6 +264,7 @@ func (s *server) handleList(arg []string) {
 		cwd, _ := os.Getwd()
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
+			log.Print(err)
 			s.handleResponse(RequestedFileActionNotTaken)
 			return
 		}
@@ -260,6 +276,7 @@ func (s *server) handleList(arg []string) {
 				dir := fmt.Sprintf("%s/%s", cwd, file.Name())
 				files, err := ioutil.ReadDir(dir)
 				if err != nil {
+					log.Print(err)
 					s.handleResponse(RequestedFileActionNotTaken)
 					return
 				}
@@ -283,22 +300,61 @@ func (s *server) handleSize(arg []string) {
 
 	file, err := os.Open(path)
 	if err != nil {
+		log.Print(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
 		return
 	}
 
 	info, err := file.Stat()
 	if err != nil {
+		log.Print(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
 		return
 	}
 
-	s.handleResponse(fmt.Sprintf(FileInfo, info.Size()))
+	s.handleResponse(fmt.Sprintf(FileStatus, info.Size()))
+}
+
+func (s *server) handleRetrieve(arg []string) {
+	conn, err := s.pasv.Accept()
+	if err != nil {
+		log.Print(err) // e.g., connection aborted
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RETR"))
+		return
+	}
+
+	defer conn.Close()
+
+	s.handleResponse(AcceptedDataConnection)
+
+	cwd, _ := os.Getwd()
+	path := fmt.Sprintf("%s/%s", cwd, arg[1])
+
+	file, err := os.Open(path)
+	if err != nil {
+		log.Print(err)
+		s.handleResponse(RequestedFileActionNotTaken)
+		return
+	}
+
+	_, err = io.Copy(conn, file)
+	if err != nil && strings.Contains(err.Error(), "is a directory") {
+		s.handleResponse(CanOnlyRetrieveRegularFiles)
+		return
+	}
+	if err != nil {
+		log.Print(err)
+		s.handleResponse(RequestedFileActionNotTaken)
+		return
+	}
+
+	s.handleResponse(RequestedFileActionTaken)
 }
 
 func (s *server) handleNLST(arg []string) {
 	conn, err := s.pasv.Accept()
 	if err != nil {
+		log.Print(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "NLST"))
 		return
 	}
@@ -310,6 +366,7 @@ func (s *server) handleNLST(arg []string) {
 	cwd, _ := os.Getwd()
 	files, err := ioutil.ReadDir(cwd)
 	if err != nil {
+		log.Print(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
