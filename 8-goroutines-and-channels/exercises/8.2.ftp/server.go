@@ -23,35 +23,38 @@ import (
 
 // List of FTP server return codes
 const (
-	AcceptedDataConnection      = "150 Accepted data connection\n"
-	TypeIsNow8BitBinary         = "200 TYPE is now 8-bit binary\n"
-	SystemStatus                = "211 no-features\n"
-	FileStatus                  = "213 %s\n"
-	NameSystemType              = "215 UNIX Type: L8\n"
-	ServiceReadyForNewUser      = "220 Service ready for new user\n"
-	ServiceClosingConnection    = "221 Service closing control connection\n"
-	RequestedFileActionTaken    = "226 File successfully transferred\n"
-	ClosingDataConnection       = "226 Closing data connection\n"
-	EnteringPassiveMode         = "227 Entering Passive Mode (%s)\n"
-	UserLoggedInProceed         = "230 User logged in, proceed\n"
-	PathNameCreated             = "257 Created \"%s\"\n"
-	CurrentWorkingDirectory     = "257 \"%s\"\n"
-	UserOkayNeedPassword        = "331 User %s okay, need password\n"
-	RequestedFileActionNotTaken = "450 Requested file action not taken\n"
-	RequestedActionHasFailed    = "500 Requested action has failed \"%s\"\n"
-	CommandNotImplemented       = "502 Command not implemented \"%s\"\n"
-	CanOnlyRetrieveRegularFiles = "550 Can only retrieve regular files\n"
+	AcceptedDataConnection       = "150 Accepted data connection\n"
+	TypeIsNow8BitBinary          = "200 TYPE is now 8-bit binary\n"
+	SystemStatus                 = "211 no-features\n"
+	FileStatus                   = "213 %s\n"
+	NameSystemType               = "215 UNIX Type: L8\n"
+	ServiceReadyForNewUser       = "220 Service ready for new user\n"
+	ServiceClosingConnection     = "221 Service closing control connection\n"
+	RequestedFileActionTaken     = "226 File successfully transferred\n"
+	ClosingDataConnection        = "226 Closing data connection\n"
+	EnteringPassiveMode          = "227 Entering Passive Mode (%s)\n"
+	UserLoggedInProceed          = "230 User logged in, proceed\n"
+	RequestedFileActionCompleted = "250 OK. Current directory is %s\n"
+	PathNameCreated              = "257 Created \"%s\"\n"
+	CurrentWorkingDirectory      = "257 \"%s\"\n"
+	UserOkayNeedPassword         = "331 User %s okay, need password\n"
+	RequestedFileActionNotTaken  = "450 Requested file action not taken\n"
+	RequestedActionHasFailed     = "500 Requested action has failed \"%s\"\n"
+	CommandNotImplemented        = "502 Command not implemented \"%s\"\n"
+	CanOnlyRetrieveRegularFiles  = "550 Can only retrieve regular files\n"
+	NoSuchFileOrDirectory        = "550 No such file or directory %s\n"
+	CantChangeDirectory          = "550 Not a directory %s\n"
 )
 
 func main() {
 	listener, err := net.Listen("tcp", "localhost:8080")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	temp, err := seedFolder()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln(err)
 	}
 
 	handleClose(temp)
@@ -59,11 +62,11 @@ func main() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Print(err) // e.g., connection aborted
+			log.Println(err) // e.g., connection aborted
 			continue
 		}
 
-		s := &server{conn: conn}
+		s := &server{conn: conn, root: temp}
 
 		s.handleResponse(ServiceReadyForNewUser) // automatically accept
 
@@ -108,10 +111,11 @@ func handleConn(s *server) {
 		case "RETR":
 			s.handleRetrieve(arg)
 		case "NLST":
-			s.handleNLST(arg)
+			s.handleNameList(arg)
 		case "PWD":
-			cwd, _ := os.Getwd()
-			s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, cwd))
+			s.handlePrintWorkingDirectory()
+		case "CWD":
+			s.handleChangeWorkingDirectory(arg)
 		default:
 			fmt.Println("cmd", cmd)
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
@@ -171,6 +175,7 @@ type server struct {
 	conn net.Conn
 	pasv net.Listener
 	text *tabwriter.Writer
+	root string
 }
 
 func (s *server) handleResponse(msg string) {
@@ -198,7 +203,7 @@ func (s *server) handlePassive() {
 	)
 
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "PASV"))
 		return
 	}
@@ -209,7 +214,7 @@ func (s *server) handlePassive() {
 func (s *server) handleList(arg []string) {
 	conn, err := s.pasv.Accept()
 	if err != nil {
-		log.Print(err) // e.g., connection aborted
+		log.Println(err) // e.g., connection aborted
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "LIST"))
 		return
 	}
@@ -251,7 +256,7 @@ func (s *server) handleList(arg []string) {
 		cwd, _ := os.Getwd()
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
-			log.Print(err)
+			log.Println(err)
 			s.handleResponse(RequestedFileActionNotTaken)
 			return
 		}
@@ -264,7 +269,7 @@ func (s *server) handleList(arg []string) {
 		cwd, _ := os.Getwd()
 		files, err := ioutil.ReadDir(cwd)
 		if err != nil {
-			log.Print(err)
+			log.Println(err)
 			s.handleResponse(RequestedFileActionNotTaken)
 			return
 		}
@@ -276,7 +281,7 @@ func (s *server) handleList(arg []string) {
 				dir := fmt.Sprintf("%s/%s", cwd, file.Name())
 				files, err := ioutil.ReadDir(dir)
 				if err != nil {
-					log.Print(err)
+					log.Println(err)
 					s.handleResponse(RequestedFileActionNotTaken)
 					return
 				}
@@ -300,14 +305,14 @@ func (s *server) handleSize(arg []string) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
 		return
 	}
 
 	info, err := file.Stat()
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "SIZE"))
 		return
 	}
@@ -318,7 +323,7 @@ func (s *server) handleSize(arg []string) {
 func (s *server) handleRetrieve(arg []string) {
 	conn, err := s.pasv.Accept()
 	if err != nil {
-		log.Print(err) // e.g., connection aborted
+		log.Println(err) // e.g., connection aborted
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RETR"))
 		return
 	}
@@ -332,14 +337,14 @@ func (s *server) handleRetrieve(arg []string) {
 
 	file, err := os.Open(path)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
 
 	info, err := file.Stat()
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RETR"))
 		return
 	}
@@ -350,7 +355,7 @@ func (s *server) handleRetrieve(arg []string) {
 
 	_, err = io.Copy(conn, file)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
@@ -358,10 +363,10 @@ func (s *server) handleRetrieve(arg []string) {
 	s.handleResponse(RequestedFileActionTaken)
 }
 
-func (s *server) handleNLST(arg []string) {
+func (s *server) handleNameList(arg []string) {
 	conn, err := s.pasv.Accept()
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "NLST"))
 		return
 	}
@@ -373,7 +378,7 @@ func (s *server) handleNLST(arg []string) {
 	cwd, _ := os.Getwd()
 	files, err := ioutil.ReadDir(cwd)
 	if err != nil {
-		log.Print(err)
+		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
@@ -383,4 +388,49 @@ func (s *server) handleNLST(arg []string) {
 	}
 
 	s.handleResponse(ClosingDataConnection)
+}
+
+func (s *server) handlePrintWorkingDirectory() {
+	cwd, _ := os.Getwd()
+	// Print base directory instead of full path
+	// (e.g. /dir instead of /root/dir)
+	dir := strings.Split(cwd, s.root)[1]
+	if dir != "" {
+		s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, dir))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, "/"))
+}
+
+// NOTE: We improved PWD by using strings split to get the base path. However,
+// we need to think about navigation when encountering ../ and especially
+// ../../../ that takes outside the root dir.
+func (s *server) handleChangeWorkingDirectory(arg []string) {
+	dir := arg[1]
+	cwd, _ := os.Getwd()
+	// Prevent changing to a directory above root
+	if strings.HasSuffix(cwd, s.root) && strings.Contains(dir, "../") {
+		s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, "/"))
+		return
+	}
+
+	path := fmt.Sprintf("%s/%s", cwd, dir)
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, "/"+dir))
+		return
+	}
+	if !info.IsDir() {
+		s.handleResponse(fmt.Sprintf(CantChangeDirectory, "/"+dir))
+		return
+	}
+
+	err = os.Chdir(path)
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "CWD"))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, "/"+dir))
 }
