@@ -463,7 +463,7 @@ func (s *server) handleMakeDirectory(arg []string) {
 
 	// Prevent creating a directory above root
 	if !strings.HasPrefix(path, s.root) {
-		dir := filepath.Clean("/"+dir)
+		dir := filepath.Clean("/" + dir)
 		path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
 
 		err := os.Mkdir(path, 0755)
