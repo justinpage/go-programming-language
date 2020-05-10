@@ -1,6 +1,7 @@
 // References:
 
 // https://cr.yp.to/ftp.html
+// https://tools.ietf.org/html/rfc959
 // https://github.com/torbiak/gopl/tree/master/ex8.2
 // https://github.com/kspviswa/lsgo/blob/master/ls.go
 package main
@@ -15,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -44,6 +46,7 @@ const (
 	CanOnlyRetrieveRegularFiles  = "550 Can only retrieve regular files\n"
 	NoSuchFileOrDirectory        = "550 No such file or directory %s\n"
 	CantChangeDirectory          = "550 Not a directory %s\n"
+	CantCreateDirectory          = "550 Can't create existing directory\n"
 )
 
 func main() {
@@ -66,7 +69,7 @@ func main() {
 			continue
 		}
 
-		s := &server{conn: conn, root: temp}
+		s := &server{sess: conn, root: temp, path: temp}
 
 		s.handleResponse(ServiceReadyForNewUser) // automatically accept
 
@@ -75,9 +78,9 @@ func main() {
 }
 
 func handleConn(s *server) {
-	defer s.conn.Close()
+	defer s.sess.Close()
 
-	cmd := bufio.NewScanner(s.conn)
+	cmd := bufio.NewScanner(s.sess)
 	for cmd.Scan() {
 		cmd := cmd.Text()
 		arg := strings.Split(cmd, " ")
@@ -88,7 +91,7 @@ func handleConn(s *server) {
 
 		switch cmd {
 		case "USER":
-			s.handleResponse(fmt.Sprintf(UserOkayNeedPassword, arg[0]))
+			s.handleResponse(fmt.Sprintf(UserOkayNeedPassword, arg[1]))
 		case "PASS":
 			s.handleResponse(UserLoggedInProceed)
 		case "SYST":
@@ -116,6 +119,10 @@ func handleConn(s *server) {
 			s.handlePrintWorkingDirectory()
 		case "CWD":
 			s.handleChangeWorkingDirectory(arg)
+		case "MKD":
+			s.handleMakeDirectory(arg)
+		case "XMKD":
+			s.handleMakeDirectory(arg)
 		default:
 			fmt.Println("cmd", cmd)
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
@@ -172,14 +179,14 @@ func seedFolder() (string, error) {
 }
 
 type server struct {
-	conn net.Conn
+	sess net.Conn
 	pasv net.Listener
-	text *tabwriter.Writer
 	root string
+	path string
 }
 
 func (s *server) handleResponse(msg string) {
-	_, err := io.WriteString(s.conn, msg)
+	_, err := io.WriteString(s.sess, msg)
 	if err != nil {
 		return // e.g., client disconnected
 	}
@@ -191,7 +198,7 @@ func (s *server) handlePassive() {
 	s.pasv, err = net.Listen("tcp", "") // port automatically chosen
 
 	_, p, err := net.SplitHostPort(s.pasv.Addr().String())
-	h, _, err := net.SplitHostPort(s.conn.LocalAddr().String())
+	h, _, err := net.SplitHostPort(s.sess.LocalAddr().String())
 
 	addr, err := net.ResolveIPAddr("", h)
 	port, err := strconv.ParseInt(p, 10, 64)
@@ -253,8 +260,7 @@ func (s *server) handleList(arg []string) {
 	switch a := len(arg); a {
 	// list current working directory
 	case 1:
-		cwd, _ := os.Getwd()
-		files, err := ioutil.ReadDir(cwd)
+		files, err := ioutil.ReadDir(s.path)
 		if err != nil {
 			log.Println(err)
 			s.handleResponse(RequestedFileActionNotTaken)
@@ -266,8 +272,7 @@ func (s *server) handleList(arg []string) {
 		}
 	// list specific file or directory content
 	case 2:
-		cwd, _ := os.Getwd()
-		files, err := ioutil.ReadDir(cwd)
+		files, err := ioutil.ReadDir(s.path)
 		if err != nil {
 			log.Println(err)
 			s.handleResponse(RequestedFileActionNotTaken)
@@ -278,7 +283,7 @@ func (s *server) handleList(arg []string) {
 		for _, file := range files {
 			// list directory content
 			if file.Name() == match && file.IsDir() {
-				dir := fmt.Sprintf("%s/%s", cwd, file.Name())
+				dir := fmt.Sprintf("%s/%s", s.path, file.Name())
 				files, err := ioutil.ReadDir(dir)
 				if err != nil {
 					log.Println(err)
@@ -300,8 +305,7 @@ func (s *server) handleList(arg []string) {
 }
 
 func (s *server) handleSize(arg []string) {
-	cwd, _ := os.Getwd()
-	path := fmt.Sprintf("%s/%s", cwd, arg[1])
+	path := fmt.Sprintf("%s/%s", s.path, arg[1])
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -332,8 +336,7 @@ func (s *server) handleRetrieve(arg []string) {
 
 	s.handleResponse(AcceptedDataConnection)
 
-	cwd, _ := os.Getwd()
-	path := fmt.Sprintf("%s/%s", cwd, arg[1])
+	path := fmt.Sprintf("%s/%s", s.path, arg[1])
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -375,8 +378,7 @@ func (s *server) handleNameList(arg []string) {
 
 	s.handleResponse(AcceptedDataConnection)
 
-	cwd, _ := os.Getwd()
-	files, err := ioutil.ReadDir(cwd)
+	files, err := ioutil.ReadDir(s.path)
 	if err != nil {
 		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
@@ -391,10 +393,9 @@ func (s *server) handleNameList(arg []string) {
 }
 
 func (s *server) handlePrintWorkingDirectory() {
-	cwd, _ := os.Getwd()
 	// Print base directory instead of full path
 	// (e.g. /dir instead of /root/dir)
-	dir := strings.Split(cwd, s.root)[1]
+	dir := strings.Split(s.path, s.root)[1]
 	if dir != "" {
 		s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, dir))
 		return
@@ -403,34 +404,91 @@ func (s *server) handlePrintWorkingDirectory() {
 	s.handleResponse(fmt.Sprintf(CurrentWorkingDirectory, "/"))
 }
 
-// NOTE: We improved PWD by using strings split to get the base path. However,
-// we need to think about navigation when encountering ../ and especially
-// ../../../ that takes outside the root dir.
 func (s *server) handleChangeWorkingDirectory(arg []string) {
-	dir := arg[1]
-	cwd, _ := os.Getwd()
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
 	// Prevent changing to a directory above root
-	if strings.HasSuffix(cwd, s.root) && strings.Contains(dir, "../") {
+	if !strings.HasPrefix(path, s.root) {
+		s.path = s.root
 		s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, "/"))
 		return
 	}
 
-	path := fmt.Sprintf("%s/%s", cwd, dir)
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, "/"+dir))
+		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
 		return
 	}
 	if !info.IsDir() {
-		s.handleResponse(fmt.Sprintf(CantChangeDirectory, "/"+dir))
+		s.handleResponse(fmt.Sprintf(CantChangeDirectory, dir))
 		return
 	}
-
-	err = os.Chdir(path)
 	if err != nil {
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "CWD"))
 		return
 	}
 
-	s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, "/"+dir))
+	s.path = path
+	if d := strings.Split(s.path, s.root)[1]; d != "" {
+		s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, d))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(RequestedFileActionCompleted, "/"))
+}
+
+func (s *server) handleMakeDirectory(arg []string) {
+	if len(arg) != 2 {
+		s.handleResponse("usage: mkdir directory-name\n")
+	}
+
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
+	// Check if the parent directory exists before creating children
+	info, err := os.Stat(filepath.Dir(path))
+	if os.IsNotExist(err) {
+		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
+		return
+	}
+	if !info.IsDir() {
+		s.handleResponse(fmt.Sprintf(CantChangeDirectory, dir))
+		return
+	}
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
+		return
+	}
+
+	// Prevent creating a directory above root
+	if !strings.HasPrefix(path, s.root) {
+		dir := filepath.Clean("/"+dir)
+		path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+
+		err := os.Mkdir(path, 0755)
+		if os.IsExist(err) {
+			s.handleResponse(fmt.Sprintf(CantCreateDirectory))
+			return
+		}
+		if err != nil {
+			s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
+			return
+		}
+
+		s.handleResponse(fmt.Sprintf(PathNameCreated, dir))
+		return
+	}
+
+	err = os.Mkdir(path, 0755)
+	if os.IsExist(err) {
+		s.handleResponse(fmt.Sprintf(CantCreateDirectory))
+		return
+	}
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(PathNameCreated, dir))
 }
