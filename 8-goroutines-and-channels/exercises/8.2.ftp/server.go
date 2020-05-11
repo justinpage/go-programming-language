@@ -37,6 +37,7 @@ const (
 	EnteringPassiveMode          = "227 Entering Passive Mode (%s)\n"
 	UserLoggedInProceed          = "230 User logged in, proceed\n"
 	RequestedFileActionCompleted = "250 OK. Current directory is %s\n"
+	PathNameDeleted              = "250 Deleted %s\n"
 	PathNameCreated              = "257 Created \"%s\"\n"
 	CurrentWorkingDirectory      = "257 \"%s\"\n"
 	UserOkayNeedPassword         = "331 User %s okay, need password\n"
@@ -47,6 +48,7 @@ const (
 	NoSuchFileOrDirectory        = "550 No such file or directory %s\n"
 	CantChangeDirectory          = "550 Not a directory %s\n"
 	CantCreateDirectory          = "550 Can't create existing directory\n"
+	CanOnlyDeleteRegularFiles    = "550 Can only delete regular files\n"
 )
 
 func main() {
@@ -123,6 +125,12 @@ func handleConn(s *server) {
 			s.handleMakeDirectory(arg)
 		case "XMKD":
 			s.handleMakeDirectory(arg)
+		case "RMD":
+			s.handleRemoveDirectory(arg)
+		case "XRMD":
+			s.handleRemoveDirectory(arg)
+		case "DELE":
+			s.handleDelete(arg)
 		default:
 			fmt.Println("cmd", cmd)
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
@@ -378,7 +386,19 @@ func (s *server) handleNameList(arg []string) {
 
 	s.handleResponse(AcceptedDataConnection)
 
-	files, err := ioutil.ReadDir(s.path)
+	path := s.path
+	if len(arg) > 1 {
+		// Support sub-directory listing when available
+		path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.path, arg[1]))
+	}
+
+	// Prevent listing a directory above root
+	if !strings.HasPrefix(path, s.root) {
+		dir := filepath.Clean("/" + arg[1])
+		path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+	}
+
+	files, err := ioutil.ReadDir(path)
 	if err != nil {
 		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
@@ -491,4 +511,78 @@ func (s *server) handleMakeDirectory(arg []string) {
 	}
 
 	s.handleResponse(fmt.Sprintf(PathNameCreated, dir))
+}
+
+func (s *server) handleRemoveDirectory(arg []string) {
+	if len(arg) != 2 {
+		s.handleResponse("usage: rm directory-name\n")
+	}
+
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
+	// Prevent deleting a directory above root
+	if !strings.HasPrefix(path, s.root) {
+		dir := filepath.Clean("/" + dir)
+		path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+	}
+
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
+		return
+	}
+	if !info.IsDir() {
+		s.handleResponse(fmt.Sprintf(CantChangeDirectory, dir))
+		return
+	}
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RMD"))
+		return
+	}
+
+	err = os.RemoveAll(path)
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RMD"))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(PathNameDeleted, dir))
+}
+
+func (s *server) handleDelete(arg []string) {
+	if len(arg) != 2 {
+		s.handleResponse("usage: delete remote-file\n")
+	}
+
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
+	// Prevent deleting a remote-file above root
+	if !strings.HasPrefix(path, s.root) {
+		dir := filepath.Clean("/" + dir)
+		path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+	}
+
+	info, err := os.Stat(path)
+	if os.IsNotExist(err) {
+		s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
+		return
+	}
+	if info.IsDir() {
+		s.handleResponse(CanOnlyDeleteRegularFiles)
+		return
+	}
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "DELE"))
+		return
+	}
+
+	err = os.Remove(path)
+	if err != nil {
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "DELE"))
+		return
+	}
+
+	s.handleResponse(fmt.Sprintf(PathNameDeleted, dir))
 }
