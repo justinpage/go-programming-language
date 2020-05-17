@@ -131,6 +131,8 @@ func handleConn(s *server) {
 			s.handleRemoveDirectory(arg)
 		case "DELE":
 			s.handleDelete(arg)
+		case "STOR":
+			s.handleStore(arg)
 		default:
 			fmt.Println("cmd", cmd)
 			s.handleResponse(fmt.Sprintf(CommandNotImplemented, cmd))
@@ -153,7 +155,7 @@ func handleClose(path string) {
 }
 
 func seedFolder() (string, error) {
-	temp, err := ioutil.TempDir("/tmp/", "ftp-")
+	temp, err := ioutil.TempDir("", "ftp-")
 	if err != nil {
 		return "", err // unable to create temporary directory
 	}
@@ -280,32 +282,38 @@ func (s *server) handleList(arg []string) {
 		}
 	// list specific file or directory content
 	case 2:
-		files, err := ioutil.ReadDir(s.path)
+		dir := filepath.Clean(arg[1])
+		path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
+		// Prevent listing a directory above root
+		if !strings.HasPrefix(path, s.root) {
+			dir := filepath.Clean("/" + dir)
+			path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+		}
+
+		info, err := os.Stat(path)
+		if os.IsNotExist(err) {
+			s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
+			return
+		}
+		if err != nil {
+			s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "LIST"))
+			return
+		}
+		if !info.IsDir() {
+			list(info)
+			break
+		}
+
+		files, err := ioutil.ReadDir(path)
 		if err != nil {
 			log.Println(err)
 			s.handleResponse(RequestedFileActionNotTaken)
 			return
 		}
 
-		match := arg[1]
 		for _, file := range files {
-			// list directory content
-			if file.Name() == match && file.IsDir() {
-				dir := fmt.Sprintf("%s/%s", s.path, file.Name())
-				files, err := ioutil.ReadDir(dir)
-				if err != nil {
-					log.Println(err)
-					s.handleResponse(RequestedFileActionNotTaken)
-					return
-				}
-				for _, file := range files {
-					list(file)
-				}
-			}
-			// list specific file
-			if file.Name() == match && !file.IsDir() {
-				list(file)
-			}
+			list(file)
 		}
 	}
 
@@ -313,7 +321,8 @@ func (s *server) handleList(arg []string) {
 }
 
 func (s *server) handleSize(arg []string) {
-	path := fmt.Sprintf("%s/%s", s.path, arg[1])
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -342,9 +351,14 @@ func (s *server) handleRetrieve(arg []string) {
 
 	defer conn.Close()
 
-	s.handleResponse(AcceptedDataConnection)
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
 
-	path := fmt.Sprintf("%s/%s", s.path, arg[1])
+	// Prevent retrieving a remote-file above root
+	if !strings.HasPrefix(path, s.root) {
+		dir := filepath.Clean("/" + dir)
+		path, _ = filepath.Abs(fmt.Sprintf("%s/%s", s.root, dir))
+	}
 
 	file, err := os.Open(path)
 	if err != nil {
@@ -364,9 +378,10 @@ func (s *server) handleRetrieve(arg []string) {
 		return
 	}
 
+	s.handleResponse(AcceptedDataConnection)
+
 	_, err = io.Copy(conn, file)
 	if err != nil {
-		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
@@ -585,4 +600,35 @@ func (s *server) handleDelete(arg []string) {
 	}
 
 	s.handleResponse(fmt.Sprintf(PathNameDeleted, dir))
+}
+
+func (s *server) handleStore(arg []string) {
+	conn, err := s.pasv.Accept()
+	if err != nil {
+		log.Println(err) // e.g., connection aborted
+		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "STOR"))
+		return
+	}
+
+	defer conn.Close()
+
+	s.handleResponse(AcceptedDataConnection)
+
+	dir := filepath.Clean(arg[1])
+	path, _ := filepath.Abs(fmt.Sprintf("%s/%s", s.path, dir))
+
+	file, err := os.Create(path)
+	if err != nil {
+		s.handleResponse(RequestedFileActionNotTaken)
+		return
+	}
+
+	_, err = io.Copy(file, conn)
+	if err != nil {
+		log.Println(err)
+		s.handleResponse(RequestedFileActionNotTaken)
+		return
+	}
+
+	s.handleResponse(RequestedFileActionTaken)
 }
