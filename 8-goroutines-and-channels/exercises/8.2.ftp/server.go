@@ -139,8 +139,9 @@ func handleConn(s *server) {
 		}
 	}
 
-	if cmd.Err() != nil {
-		return // something went wrong (not io.EOF); ignore for now
+	if err := cmd.Err(); err != nil {
+		log.Println(err) // something went wrong (not io.EOF)
+		return
 	}
 }
 
@@ -180,7 +181,7 @@ func seedFolder() (string, error) {
 		return "", err
 	}
 
-	err = os.Chdir(temp) // start each connection inside /tmp/ dir
+	err = os.Chdir(temp) // start each connection inside temp dir
 	if err != nil {
 		return "", err
 	}
@@ -198,12 +199,12 @@ type server struct {
 func (s *server) handleResponse(msg string) {
 	_, err := io.WriteString(s.sess, msg)
 	if err != nil {
+		log.Println(err)
 		return // e.g., client disconnected
 	}
 }
 
 func (s *server) handlePassive() {
-	// NEED: better error handling
 	var err error
 	s.pasv, err = net.Listen("tcp", "") // port automatically chosen
 
@@ -293,10 +294,12 @@ func (s *server) handleList(arg []string) {
 
 		info, err := os.Stat(path)
 		if os.IsNotExist(err) {
+			log.Println(err)
 			s.handleResponse(fmt.Sprintf(NoSuchFileOrDirectory, dir))
 			return
 		}
 		if err != nil {
+			log.Println(err)
 			s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "LIST"))
 			return
 		}
@@ -382,6 +385,7 @@ func (s *server) handleRetrieve(arg []string) {
 
 	_, err = io.Copy(conn, file)
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
@@ -460,6 +464,7 @@ func (s *server) handleChangeWorkingDirectory(arg []string) {
 		return
 	}
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "CWD"))
 		return
 	}
@@ -492,6 +497,7 @@ func (s *server) handleMakeDirectory(arg []string) {
 		return
 	}
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
 		return
 	}
@@ -507,6 +513,7 @@ func (s *server) handleMakeDirectory(arg []string) {
 			return
 		}
 		if err != nil {
+			log.Println(err)
 			s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
 			return
 		}
@@ -521,6 +528,7 @@ func (s *server) handleMakeDirectory(arg []string) {
 		return
 	}
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "MKD"))
 		return
 	}
@@ -552,12 +560,14 @@ func (s *server) handleRemoveDirectory(arg []string) {
 		return
 	}
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RMD"))
 		return
 	}
 
 	err = os.RemoveAll(path)
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "RMD"))
 		return
 	}
@@ -589,12 +599,14 @@ func (s *server) handleDelete(arg []string) {
 		return
 	}
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "DELE"))
 		return
 	}
 
 	err = os.Remove(path)
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(fmt.Sprintf(RequestedActionHasFailed, "DELE"))
 		return
 	}
@@ -619,6 +631,7 @@ func (s *server) handleStore(arg []string) {
 
 	file, err := os.Create(path)
 	if err != nil {
+		log.Println(err)
 		s.handleResponse(RequestedFileActionNotTaken)
 		return
 	}
