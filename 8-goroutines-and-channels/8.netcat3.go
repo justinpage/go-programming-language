@@ -12,9 +12,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer conn.Close()
-	go mustCopy(os.Stdout, conn)
+	done := make(chan struct{}) // NOTE: ignoring errors
+	go func() {
+		io.Copy(os.Stdout, conn)
+		log.Println("done")
+		done <- struct{}{} // signal the main goroutine
+	}()
 	mustCopy(conn, os.Stdin)
+	conn.Close()
+	<-done // wait for background goroutine to finish
 }
 
 func mustCopy(dst io.Writer, src io.Reader) {
