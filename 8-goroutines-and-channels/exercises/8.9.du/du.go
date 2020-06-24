@@ -1,4 +1,3 @@
-// Need to revisit. Not a complete working solution
 package main
 
 import (
@@ -14,85 +13,92 @@ import (
 var verbose = flag.Bool("v", false, "show verbose progress messages")
 var sema = make(chan struct{}, 20)
 
-type root struct {
+type node struct {
+	path           string
 	nfiles, nbytes int64
+	wg             *sync.WaitGroup
 }
+
+type tree []*node
 
 func main() {
 	// Determine the initial directories
 	flag.Parse()
-	roots := flag.Args()
-	if len(roots) == 0 {
-		roots = []string{"."}
+	args := flag.Args()
+	if len(args) == 0 {
+		args = []string{"."}
 	}
 
 	// Traverse each root of the file tree in parallel
+	var wg sync.WaitGroup
+	var roots tree
+	fileSizes := make(chan map[string]int64)
+	for _, v := range args {
+		n := &node{path: v, wg: &wg}
+		roots = append(roots, n)
+		n.wg.Add(1)
+		go walkDir(v, n, fileSizes)
+	}
+
+	go func() {
+		wg.Wait()
+		close(fileSizes)
+	}()
+
 	var tick <-chan time.Time
 	if *verbose {
 		tick = time.Tick(500 * time.Millisecond)
 	}
-	for _, v := range roots {
-		var n sync.WaitGroup
-
-		fileSizes := make(chan int64)
-		n.Add(1)
-
-		// Traverse
-		go walkDir(v, &n, fileSizes)
-
-		// Wait until finish to close
-		go func() {
-			n.Wait()
-			close(fileSizes)
-		}()
-
-		// Process files in tree
-		var nfiles, nbytes int64
-		go func(v string) {
-		loop:
-			for {
-				select {
-				case size, ok := <-fileSizes:
-					if !ok {
-						break loop // fileSizes was closed
+loop:
+	for {
+		select {
+		case size, ok := <-fileSizes:
+			if !ok {
+				break loop
+			}
+			for k, v := range size {
+				for i, r := range roots {
+					if r.path == k {
+						roots[i].nfiles++
+						roots[i].nbytes += v
 					}
-					nfiles++
-					nbytes += size
-				case <-tick:
-					printDiskUsage(v, nfiles, nbytes)
 				}
 			}
-			printDiskUsage(v, nfiles, nbytes) // final totals
-		}(v)
+		case <-tick:
+			printDiskUsage(roots)
+		}
 	}
-
-	select {}
+	printDiskUsage(roots)
 }
 
-func printDiskUsage(p string, nfiles, nbytes int64) {
-	fmt.Printf("%s: %d files %.1f GB\n", p, nfiles, float64(nbytes)/1e9)
+func printDiskUsage(r tree) {
+	for _, v := range r {
+		fmt.Printf("%s:\t%d files\t%.1f GB\n",
+			v.path, v.nfiles, float64(v.nbytes)/1e9)
+	}
 }
 
 // walkDir recursively walks the file tree rooted at dir
 // and sends the size of each found file on fileSizes
-func walkDir(dir string, n *sync.WaitGroup, fileSizes chan<- int64) {
-	defer n.Done()
-	for _, entry := range dirents(dir) {
+func walkDir(root string, n *node, fs chan<- map[string]int64) {
+	defer n.wg.Done()
+	for _, entry := range dirents(n.path) {
 		if entry.IsDir() {
-			n.Add(1)
-			subdir := filepath.Join(dir, entry.Name())
-			go walkDir(subdir, n, fileSizes)
+			subdir := filepath.Join(n.path, entry.Name())
+			n := &node{path: subdir, wg: n.wg}
+			n.wg.Add(1)
+			go walkDir(root, n, fs)
 		} else {
-			fileSizes <- entry.Size()
+			fs <- map[string]int64{root: entry.Size()}
 		}
 	}
 }
 
-// dirents returns the entries of directory dir.
-func dirents(dir string) []os.FileInfo {
+// dirents returns the entries of directory p.
+func dirents(p string) []os.FileInfo {
 	sema <- struct{}{}        // acquire token
 	defer func() { <-sema }() // release token
-	entries, err := ioutil.ReadDir(dir)
+	entries, err := ioutil.ReadDir(p)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "du1: %v\n", err)
 	}
