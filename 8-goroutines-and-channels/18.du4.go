@@ -11,7 +11,6 @@ import (
 )
 
 var verbose = flag.Bool("v", false, "show verbose progress messages")
-var sema = make(chan struct{}, 20)
 
 func main() {
 	// Determine the initial directories
@@ -20,6 +19,12 @@ func main() {
 	if len(roots) == 0 {
 		roots = []string{"."}
 	}
+
+	// Cancel traversal when input is detected
+	go func() {
+		os.Stdin.Read(make([]byte, 1)) // read a single byte
+		close(done)
+	}()
 
 	// Traverse each root of the file tree in parallel
 	fileSizes := make(chan int64)
@@ -41,6 +46,12 @@ func main() {
 loop:
 	for {
 		select {
+		case <-done:
+			// Drain fileSizes to allow existing goroutines to finish.
+			for range fileSizes {
+				// Do nothing
+			}
+			return
 		case size, ok := <-fileSizes:
 			if !ok {
 				break loop // fileSizes was closed
@@ -58,10 +69,24 @@ func printDiskUsage(nfiles, nbytes int64) {
 	fmt.Printf("%d files %.1f GB\n", nfiles, float64(nbytes)/1e9)
 }
 
+var done = make(chan struct{})
+
+func cancelled() bool {
+	select {
+	case <-done:
+		return true
+	default:
+		return false
+	}
+}
+
 // walkDir recursively walks the file tree rooted at dir
 // and sends the size of each found file on fileSizes
 func walkDir(dir string, n *sync.WaitGroup, fileSizes chan<- int64) {
 	defer n.Done()
+	if cancelled() {
+		return
+	}
 	for _, entry := range dirents(dir) {
 		if entry.IsDir() {
 			n.Add(1)
@@ -73,13 +98,19 @@ func walkDir(dir string, n *sync.WaitGroup, fileSizes chan<- int64) {
 	}
 }
 
+var sema = make(chan struct{}, 20)
+
 // dirents returns the entries of directory dir.
 func dirents(dir string) []os.FileInfo {
-	sema <- struct{}{}        // acquire token
+	select {
+	case sema <- struct{}{}: // acquire token
+	case <-done:
+		return nil // cancelled
+	}
 	defer func() { <-sema }() // release token
 	entries, err := ioutil.ReadDir(dir)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "du3: %v\n", err)
+		fmt.Fprintln(os.Stderr, "du4: %v\n", err)
 	}
 	return entries
 }
