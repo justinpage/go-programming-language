@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -26,7 +27,7 @@ func main() {
 }
 
 type client struct {
-	address    string
+	name       string
 	msg        chan string // an outgoing message channel
 	idle       chan string // an idle message channel
 	lastActive time.Time
@@ -40,12 +41,12 @@ var (
 
 func broadcaster() {
 	clients := make(map[*client]bool) // all connected clients
-	tick := time.Tick(10 * time.Second)
+	tick := time.Tick(60 * time.Second)
 	for {
 		select {
 		case t := <-tick:
 			for cli := range clients {
-				if t.Sub(cli.lastActive).Seconds() > 10 {
+				if t.Sub(cli.lastActive).Seconds() > 60 {
 					cli.idle <- "You are idle. Disconnecting."
 				}
 			}
@@ -60,7 +61,7 @@ func broadcaster() {
 
 			cli.msg <- "[Users]"
 			for c := range clients {
-				cli.msg <- fmt.Sprintf("[%s\t]", c.address)
+				cli.msg <- fmt.Sprintf("[%s\t]", c.name)
 			}
 		case cli := <-leaving:
 			delete(clients, cli)
@@ -71,8 +72,17 @@ func broadcaster() {
 }
 
 func handleConn(conn net.Conn) {
+	rd := bufio.NewReader(conn)
+	fmt.Fprint(conn, "Enter name: ")
+	name, err := rd.ReadString('\n')
+	if err != nil {
+		log.Println(err)
+		log.Println("Using remote network address as default name")
+	}
+	name = strings.TrimSpace(name)
+
 	user := &client{
-		address:    conn.RemoteAddr().String(),
+		name:       name,
 		msg:        make(chan string), // outgoing client messages
 		idle:       make(chan string),
 		lastActive: time.Now(),
@@ -81,19 +91,19 @@ func handleConn(conn net.Conn) {
 	go clientWriter(conn, user)
 	go clientCloser(conn, user)
 
-	user.msg <- "You are " + user.address
-	messages <- user.address + " has arrived"
+	user.msg <- "You are " + user.name
+	messages <- user.name + " has arrived"
 	entering <- user
 
 	input := bufio.NewScanner(conn)
 	for input.Scan() {
 		user.lastActive = time.Now()
-		messages <- user.address + ": " + input.Text()
+		messages <- user.name + ": " + input.Text()
 	}
 
 	// NOTE: ignoring potential errors from input.Err()
 	leaving <- user
-	messages <- user.address + " has left"
+	messages <- user.name + " has left"
 }
 
 func clientWriter(conn net.Conn, u *client) {
