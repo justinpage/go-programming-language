@@ -2,17 +2,6 @@
 // memoization of a function of type Func
 package memo
 
-import (
-	"sync"
-)
-
-// A Memo caches the results of calling a Func.
-type Memo struct {
-	f     Func
-	mu    sync.Mutex // guards cache
-	cache map[string]*entry
-}
-
 // Func is the type of the function to memoize.
 type Func func(key string) (interface{}, error)
 
@@ -26,30 +15,54 @@ type result struct {
 	err   error
 }
 
-func NewMemo(f Func) *Memo {
-	return &Memo{f: f, cache: make(map[string]*entry)}
+// A request is a message requesting that the Func be applied to key.
+type request struct {
+	key      string
+	response chan<- result // the client wants a single result
 }
 
-// Note: not concurrency-safe!
-func (memo *Memo) Get(key string) (value interface{}, err error) {
-	memo.mu.Lock()
-	e := memo.cache[key]
-	if e == nil {
-		// This is the first request for this key.
-		// This goroutine becomes responsible for computing
-		// the value and broadcasting the ready condition
-		e = &entry{ready: make(chan struct{})}
-		memo.cache[key] = e
-		memo.mu.Unlock()
+type Memo struct{ requests chan request }
 
-		e.res.value, e.res.err = memo.f(key)
+// New returns a memoization of f. Clients must subsequently call Close.
+func NewMemo(f Func) *Memo {
+	memo := &Memo{requests: make(chan request)}
+	go memo.server(f)
+	return memo
+}
 
-		close(e.ready) // broadcast ready condition
-	} else {
-		// This is a repeat request for this key.
-		memo.mu.Unlock()
+func (memo *Memo) Get(key string) (interface{}, error) {
+	response := make(chan result)
+	memo.requests <- request{key, response}
+	res := <-response
+	return res.value, res.err
+}
 
-		<-e.ready // wait for ready condition
+func (memo *Memo) Close() { close(memo.requests) }
+
+func (memo *Memo) server(f Func) {
+	cache := make(map[string]*entry)
+	for req := range memo.requests {
+		e := cache[req.key]
+		if e == nil {
+			// This is the first request for this key.
+			e = &entry{ready: make(chan struct{})}
+			cache[req.key] = e
+			go e.call(f, req.key) // call f(key)
+		}
+		go e.deliver(req.response)
 	}
-	return e.res.value, e.res.err
+}
+
+func (e *entry) call(f Func, key string) {
+	// Evaluate the function.
+	e.res.value, e.res.err = f(key)
+	// Broadcast the ready condition
+	close(e.ready)
+}
+
+func (e *entry) deliver(response chan<- result) {
+	// Wait for the ready condition
+	<-e.ready
+	// Send the result to the client.
+	response <- e.res
 }

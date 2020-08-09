@@ -30,7 +30,6 @@ func NewMemo(f Func) *Memo {
 	return &Memo{f: f, cache: make(map[string]*entry)}
 }
 
-// Note: not concurrency-safe!
 func (memo *Memo) Get(key string) (value interface{}, err error) {
 	memo.mu.Lock()
 	e := memo.cache[key]
