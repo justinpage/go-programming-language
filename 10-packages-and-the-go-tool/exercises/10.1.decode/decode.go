@@ -3,26 +3,70 @@
 package main
 
 import (
+	"bytes"
+	"errors"
+	"flag"
 	"fmt"
 	"image"
+	"image/gif"
 	"image/jpeg"
-	_ "image/png" // register PNG decoder
+	"image/png"
 	"io"
 	"os"
+	"strings"
 )
 
 func main() {
-	if err := toJPEG(os.Stdin, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "jpeg: %v\n", err)
-		os.Exit(1)
+	var format string
+	flag.StringVar(&format, "format", "jpeg", "output format")
+	img, err := Convert(os.Stdin, format)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
+		return
+	}
+	io.Copy(os.Stdout, img)
+}
+
+func Convert(in io.Reader, format string) (io.Reader, error) {
+	img, _, err := image.Decode(in)
+	if err != nil {
+		return nil, err
+	}
+	format = strings.ToLower(format)
+	switch format {
+	case "jpeg":
+		return toJPEG(img)
+	case "jpg":
+		return toJPEG(img)
+	case "png":
+		return toPNG(img)
+	case "gif":
+		return toGIF(img)
+	default:
+		return nil, errors.New("image: unknown format " + format)
 	}
 }
 
-func toJPEG(in io.Reader, out io.Writer) error {
-	img, kind, err := image.Decode(in)
-	if err != nil {
-		return err
+func toJPEG(img image.Image) (io.Reader, error) {
+	buf := new(bytes.Buffer)
+	if err := jpeg.Encode(buf, img, &jpeg.Options{Quality: 95}); err != nil {
+		return nil, err
 	}
-	fmt.Fprintln(os.Stderr, "Input format =", kind)
-	return jpeg.Encode(out, img, &jpeg.Options{Quality: 95})
+	return buf, nil
+}
+
+func toPNG(img image.Image) (io.Reader, error) {
+	buf := new(bytes.Buffer)
+	if err := png.Encode(buf, img); err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
+func toGIF(img image.Image) (io.Reader, error) {
+	buf := new(bytes.Buffer)
+	if err := gif.Encode(buf, img, &gif.Options{}); err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
