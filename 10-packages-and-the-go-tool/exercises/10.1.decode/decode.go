@@ -1,5 +1,5 @@
-// The jpeg command reads a PNG image from the standard input
-// and writes it as a JPEG image to the standard output.
+// The command reads an image from the standard input
+// and writes it as an image to the standard output.
 //
 // cat images/pikachu.jpeg | go run decode.go -format=png > test.png
 package main
