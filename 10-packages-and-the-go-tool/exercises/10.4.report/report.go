@@ -14,23 +14,27 @@ import (
 )
 
 func main() {
-	for _, p := range os.Args[1:] {
-		findTransitiveDependency(getImportPath(p))
+	if len(os.Args) < 2 {
+		os.Exit(0)
 	}
+	findTransitiveDependency(getImportPath(os.Args[1:]))
 }
 
-func getImportPath(p string) (a string) {
-	arg := []string{"list", "-f={{.ImportPath}}", p}
+func getImportPath(p []string) []string {
+	arg := []string{"list", "-f={{.ImportPath}}"}
+	arg = append(arg, p...)
 	out, err := exec.Command("go", arg...).Output()
 	if err != nil {
 		handleErr(err)
-		return
 	}
-	return strings.TrimSuffix(string(out), "\n")
-
+	return strings.Fields(string(out))
 }
 
-func findTransitiveDependency(p string) {
+func findTransitiveDependency(p []string) {
+	target := make(map[string]bool)
+	for _, v := range p {
+		target[v] = true
+	}
 	arg := []string{"list",
 		`-f={{.ImportPath}} {{join .Deps " "}}`,
 		"github.com/justinpage/go-programming-language/10-packages-and-the-go-tool",
@@ -40,26 +44,29 @@ func findTransitiveDependency(p string) {
 		handleErr(err)
 	}
 	input := bufio.NewScanner(bytes.NewReader(out))
-	pkgs := make(map[string]string)
+	pkgs := make(map[string][]string)
 	for input.Scan() {
 		fields := strings.Fields(input.Text())
 		pkg := fields[0]
 		deps := fields[1:]
 		for _, dep := range deps {
-			if p == dep {
-				pkgs[pkg] = p
+			if target[dep] {
+				pkgs[pkg] = append(pkgs[pkg], dep)
 			}
 		}
 	}
-	for k, v := range pkgs {
-		log.Printf("%s -> %v", k, v)
+	for k, d := range pkgs {
+		log.Printf("%s:\n", k)
+		for _, v := range d {
+			log.Printf("\t=> %s\n", v)
+		}
 	}
 }
 
 func handleErr(err error) {
 	e, ok := err.(*exec.ExitError)
 	if !ok {
-		log.Printf("%s\n", err)
+		log.Fatalf("%s\n", err)
 	}
-	log.Printf("%s\n", e.Stderr)
+	log.Fatalf("%s\n", e.Stderr)
 }
