@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/justinpage/go-programming-language/4-composite-types/exercises/4.12.xkcd/comic"
+	xkcd "github.com/justinpage/go-programming-language/4-composite-types/exercises/4.12.xkcd/comic"
 )
 
 func main() {
