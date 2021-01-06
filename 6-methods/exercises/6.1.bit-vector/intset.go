@@ -81,7 +81,7 @@ func (s *IntSet) Remove(x int) {
 	}
 }
 
-// Remove x from the set
+// Remove all elements from the set
 func (s *IntSet) Clear() {
 	s.words = nil
 }
