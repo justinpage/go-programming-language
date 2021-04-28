@@ -1,4 +1,4 @@
-package format
+package display
 
 import (
 	"fmt"
@@ -11,7 +11,6 @@ func Display(name string, x interface{}) {
 	display(name, reflect.ValueOf(x))
 }
 
-// formatAtom formats a vlaue without inspecting its internal structure
 func display(path string, v reflect.Value) {
 	switch v.Kind() {
 	case reflect.Invalid:
@@ -26,7 +25,32 @@ func display(path string, v reflect.Value) {
 			display(fieldPath, v.Field(i))
 		}
 	case reflect.Map:
-		// START HERE!!!!
+		for _, key := range v.MapKeys() {
+			display(fmt.Sprintf("%s[%s]", path,
+				formatAtom(key)), v.MapIndex(key))
+		}
+	case reflect.Ptr:
+		if v.IsNil() {
+			fmt.Printf("%s = nil\n", path)
+		} else {
+			display(fmt.Sprintf("(*%s)", path), v.Elem())
+		}
+	case reflect.Interface:
+		if v.IsNil() {
+			fmt.Printf("%s = nil\n", path)
+		} else {
+			fmt.Printf("%s.type = %s\n", path, v.Elem().Type())
+			display(path+".value", v.Elem())
+		}
+	default: // basic types, channels, funcs
+		fmt.Printf("%s = %s\n", path, formatAtom(v))
+	}
+}
+
+func formatAtom(v reflect.Value) string {
+	switch v.Kind() {
+	case reflect.Invalid:
+		return "Invalid"
 	case reflect.Int, reflect.Int8, reflect.Int16,
 		reflect.Int32, reflect.Int64:
 		return strconv.FormatInt(v.Int(), 10)
